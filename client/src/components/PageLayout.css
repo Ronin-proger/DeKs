@@ -1,0 +1,46 @@
+.page-layout {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 100vw;
+  height: var(--ns-vh);
+  min-height: var(--ns-vh);
+  overflow: hidden;
+}
+
+.page-layout-main {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.page-layout-full {
+  height: var(--ns-vh);
+  min-height: var(--ns-vh);
+  overflow: hidden;
+}
+
+.page-layout-public .page-layout-main,
+.page-layout-app .page-layout-main {
+  background: var(--ns-bg-elevated);
+}
+
+.page-layout-fixed {
+  overflow: hidden;
+}
+
+.page-layout-fixed .page-layout-main {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.page-layout-fixed .site-footer {
+  padding: 12px 20px calc(12px + var(--ns-safe-bottom));
+}
+
+.page-layout-fixed .footer-copy {
+  font-size: 11px;
+}

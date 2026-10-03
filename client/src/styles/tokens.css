@@ -1,0 +1,75 @@
+:root {
+  /* backgrounds */
+  --ns-bg-app: #0a0a0f;
+  --ns-bg-elevated: #0c0e14;
+  --ns-bg-panel: #070a0f;
+  --ns-bg-glass: rgba(12, 12, 28, 0.32);
+  --ns-bg-glass-light: rgba(255, 255, 255, 0.04);
+  --ns-bg-input: rgba(255, 255, 255, 0.06);
+  --ns-bg-nav: rgba(7, 10, 15, 0.92);
+  --ns-bg-footer: rgba(7, 10, 15, 0.85);
+  --ns-bg-chat-history: rgba(0, 0, 0, 0.3);
+
+  /* accent */
+  --ns-accent-rgb: 129, 140, 248;
+  --ns-accent-from: #818cf8;
+  --ns-accent-to: #6366f1;
+  --ns-accent: #818cf8;
+  --ns-accent-hover: #a5b4fc;
+  --ns-accent-muted: rgba(var(--ns-accent-rgb), 0.15);
+  --ns-accent-muted-strong: rgba(var(--ns-accent-rgb), 0.25);
+  --ns-accent-glow: rgba(99, 102, 241, 0.3);
+  --ns-accent-text: #c7d2fe;
+  --ns-accent-text-bright: #e0e7ff;
+
+  /* semantic */
+  --ns-success: #4ade80;
+  --ns-success-muted: rgba(74, 222, 128, 0.1);
+  --ns-error: #f87171;
+  --ns-error-muted: rgba(248, 113, 113, 0.12);
+  --ns-danger: #ef4444;
+
+  /* text */
+  --ns-text-primary: #fff;
+  --ns-text-secondary: rgba(255, 255, 255, 0.65);
+  --ns-text-muted: rgba(255, 255, 255, 0.45);
+  --ns-text-faint: rgba(255, 255, 255, 0.35);
+
+  /* borders */
+  --ns-border: rgba(255, 255, 255, 0.08);
+  --ns-border-strong: rgba(255, 255, 255, 0.12);
+
+  /* radius */
+  --ns-radius-sm: 8px;
+  --ns-radius-md: 12px;
+  --ns-radius-lg: 18px;
+  --ns-radius-xl: 28px;
+  --ns-radius-window: 48px;
+  --ns-radius-pill: 999px;
+
+  /* typography */
+  --ns-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  /* effects */
+  --ns-blur-nav: blur(16px);
+  --ns-blur-window: blur(48px) saturate(1.5);
+  --ns-shadow-window:
+    0 40px 120px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  --ns-gradient-accent: linear-gradient(135deg, var(--ns-accent-from), var(--ns-accent-to));
+  --ns-gradient-hero: linear-gradient(135deg, #fff 30%, var(--ns-accent-from) 100%);
+  --ns-gradient-bg: radial-gradient(ellipse at 30% 20%, #1a1a2e, var(--ns-bg-app));
+
+  /* layout */
+  --ns-vh: 100vh;
+  --ns-safe-top: env(safe-area-inset-top, 0px);
+  --ns-safe-right: env(safe-area-inset-right, 0px);
+  --ns-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --ns-safe-left: env(safe-area-inset-left, 0px);
+}
+
+@supports (height: 100dvh) {
+  :root {
+    --ns-vh: 100dvh;
+  }
+}

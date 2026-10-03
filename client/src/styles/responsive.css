@@ -1,0 +1,53 @@
+/* global mobile / touch fixes */
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  min-height: var(--ns-vh);
+  padding-left: var(--ns-safe-left);
+  padding-right: var(--ns-safe-right);
+}
+
+img,
+video,
+canvas,
+svg {
+  max-width: 100%;
+  height: auto;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  touch-action: manipulation;
+}
+
+@media (max-width: 768px) {
+  .modal-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .modal-content {
+    width: 100% !important;
+    max-width: none !important;
+    max-height: min(92dvh, calc(var(--ns-vh) - var(--ns-safe-top) - 12px));
+    border-radius: 20px 20px 0 0;
+    margin-bottom: 0;
+    padding-bottom: calc(20px + var(--ns-safe-bottom));
+  }
+}
+
+@media (max-width: 480px) {
+  .ns-btn-primary,
+  .ns-btn-secondary,
+  .btn,
+  .primary-btn {
+    min-height: 44px;
+  }
+}

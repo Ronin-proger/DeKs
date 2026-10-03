@@ -1,0 +1,115 @@
+.markdown-message {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 15px;
+  line-height: 1.65;
+  word-break: break-word;
+}
+
+.markdown-message > :first-child { margin-top: 0; }
+.markdown-message > :last-child { margin-bottom: 0; }
+
+.markdown-message p {
+  margin: 0 0 10px;
+}
+
+.markdown-message h1,
+.markdown-message h2,
+.markdown-message h3,
+.markdown-message h4 {
+  margin: 14px 0 8px;
+  font-weight: 600;
+  color: #fff;
+  line-height: 1.35;
+}
+
+.markdown-message h1 { font-size: 1.25em; }
+.markdown-message h2 { font-size: 1.15em; }
+.markdown-message h3 { font-size: 1.05em; }
+
+.markdown-message ul,
+.markdown-message ol {
+  margin: 0 0 10px;
+  padding-left: 1.35em;
+}
+
+.markdown-message li {
+  margin: 4px 0;
+}
+
+.markdown-message li > p {
+  margin: 0;
+}
+
+.markdown-message blockquote {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border-left: 3px solid rgba(129, 140, 248, 0.55);
+  background: rgba(99, 102, 241, 0.08);
+  border-radius: 0 8px 8px 0;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.markdown-message code {
+  font-family: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+  font-size: 0.9em;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.markdown-message pre {
+  margin: 10px 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow-x: auto;
+}
+
+.markdown-message pre code {
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.markdown-message table {
+  width: 100%;
+  margin: 10px 0;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.markdown-message th,
+.markdown-message td {
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  text-align: left;
+}
+
+.markdown-message th {
+  background: rgba(99, 102, 241, 0.15);
+  color: #e0e7ff;
+}
+
+.markdown-message a {
+  color: #a5b4fc;
+  text-decoration: none;
+}
+
+.markdown-message a:hover {
+  text-decoration: underline;
+}
+
+.markdown-message .katex-display {
+  margin: 12px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px 0;
+}
+
+.markdown-message .katex {
+  font-size: 1.05em;
+}

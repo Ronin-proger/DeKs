@@ -1,0 +1,23 @@
+# зависимости и окружения
+node_modules/
+.venv/
+.venv-*/
+venv/
+
+# секреты
+.env*
+!.env.example
+HAC/.obsidian/plugins/obsidian-local-rest-api/data.json
+
+# локальные данные
+*.db
+server/uploads/
+__pycache__/
+*.py[cod]
+
+# сборка
+client/dist/
+
+# система
+.DS_Store
+Thumbs.db
