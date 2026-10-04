@@ -742,7 +742,8 @@ function ObsidianPage() {
           </Link>
           <div className="obsidian-title">
             <FileText size={18} />
-            <span>Obsidian · NeuroVault</span>
+            <span>База знаний</span>
+            <span className="demo-notes-label">{t('demo_notes_label')}</span>
           </div>
           <div className="obsidian-status">
             <span className={serverOnline ? 'status-online' : 'status-error'}>

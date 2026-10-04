@@ -1,10 +1,16 @@
-def serialize_user_public(row) -> dict:
+def serialize_user_self(row) -> dict:
     return {
         "id": row["id"],
         "fullName": row["fullName"],
-        "email": row["email"],
         "avatarUrl": row["avatarUrl"] or None,
         "position": row["position"] or "",
-        "birthDate": row["birthDate"] or None,
-        "createdAt": row["createdAt"],
+    }
+
+
+def serialize_colleague(row) -> dict:
+    return {
+        "id": row["id"],
+        "fullName": row["fullName"],
+        "avatarUrl": row["avatarUrl"] or None,
+        "position": row["position"] or "",
     }

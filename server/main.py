@@ -1,8 +1,9 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -15,7 +16,18 @@ from parser import router as parser_router
 from workspace import router as workspace_router
 from profile import router as profile_router
 from schemas import ChatRequest, LoginRequest, RegisterRequest
-from user_utils import serialize_user_public
+from security import (
+    COOKIE_NAME,
+    SERVER_ERROR,
+    cookie_settings,
+    create_session,
+    delete_session,
+    hash_password,
+    password_matches,
+    require_user,
+    upgrade_password_if_needed,
+)
+from user_utils import serialize_colleague, serialize_user_self
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -40,9 +52,16 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+def _client_origins() -> list[str]:
+    raw = os.getenv("CLIENT_ORIGIN", "").strip()
+    if not raw:
+        raw = "http://localhost:5173,http://127.0.0.1:5173"
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_client_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -97,19 +116,19 @@ def register(body: RegisterRequest):
 
             conn.execute(
                 "INSERT INTO users (fullName, email, password) VALUES (?, ?, ?)",
-                (full_name, email, password),
+                (full_name, email, hash_password(password)),
             )
             conn.commit()
 
         logger.info("User registered: %s", email)
         return {"success": True, "message": "Регистрация успешна"}
-    except Exception as exc:
+    except Exception:
         logger.exception("Registration error")
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail=SERVER_ERROR)
 
 
-@app.post("/api/check-login")
-def check_login(body: LoginRequest):
+@app.post("/api/login")
+def login(body: LoginRequest, response: Response):
     email = body.email.strip()
     password = body.password.strip()
 
@@ -123,37 +142,69 @@ def check_login(body: LoginRequest):
                 (email,),
             ).fetchone()
 
-        if not user:
-            return {"success": False, "message": "Пользователь не найден"}
+        if not user or not password_matches(user["password"], password):
+            return {"success": False, "message": "Неверная почта или пароль"}
 
-        if user["password"] != password:
-            return {"success": False, "message": "Неверный пароль"}
-
+        upgrade_password_if_needed(user["id"], user["password"], password)
+        token = create_session(user["id"])
+        response.set_cookie(value=token, **cookie_settings())
         logger.info("Login success: %s", email)
         return {
             "success": True,
             "message": "Добро пожаловать!",
-            "user": serialize_user_public(user),
+            "user": serialize_user_self(user),
         }
-    except Exception as exc:
+    except Exception:
         logger.exception("Login error")
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail=SERVER_ERROR)
 
 
-@app.get("/api/users")
-def get_users():
+@app.post("/api/logout")
+def logout(request: Request, response: Response):
+    delete_session(request.cookies.get(COOKIE_NAME))
+    response.delete_cookie(COOKIE_NAME, path="/")
+    return {"success": True}
+
+
+@app.get("/api/me")
+def me(request: Request):
+    user = require_user(request)
+    return {"success": True, "user": serialize_user_self(user)}
+
+
+@app.get("/api/colleagues")
+def colleagues(request: Request):
+    user = require_user(request)
     try:
         init_db()
         with get_connection() as conn:
             rows = conn.execute(
-                "SELECT * FROM users ORDER BY id DESC"
+                """
+                SELECT id, fullName, avatarUrl, position
+                FROM users
+                WHERE id != ?
+                ORDER BY fullName COLLATE NOCASE ASC
+                """,
+                (user["id"],),
             ).fetchall()
+        return {"success": True, "users": [serialize_colleague(row) for row in rows]}
+    except Exception:
+        logger.exception("Colleagues list error")
+        raise HTTPException(status_code=500, detail=SERVER_ERROR)
 
-        users = [serialize_user_public(row) for row in rows]
-        return {"success": True, "users": users}
-    except Exception as exc:
-        logger.exception("Users list error")
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+@app.get("/api/colleagues/{user_id}")
+def colleague(user_id: int, request: Request):
+    require_user(request)
+    init_db()
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT id, fullName, avatarUrl, position FROM users WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Коллега не найден")
+    return {"success": True, "user": serialize_colleague(row)}
 
 
 @app.post("/api/chat")
@@ -165,6 +216,6 @@ async def chat(body: ChatRequest):
     try:
         response = await send_message(message)
         return {"success": True, "response": response}
-    except Exception as exc:
+    except Exception:
         logger.exception("AI chat error")
-        return {"success": False, "error": str(exc), "message": str(exc)}
+        return {"success": False, "message": SERVER_ERROR}

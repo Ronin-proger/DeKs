@@ -217,12 +217,6 @@ export function AppNavbar() {
 
         </NavLink>
 
-        <NavLink to="/chat" className={({ isActive }) => isActive ? 'active' : ''} onClick={close}>
-
-          <Bot size={15} /> {t('nav_ai_chat')}
-
-        </NavLink>
-
         <NavLink to="/messenger" className={({ isActive }) => isActive ? 'active' : ''} onClick={close}>
 
           <MessageCircle size={15} /> {t('nav_messenger')}

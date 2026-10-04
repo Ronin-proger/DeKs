@@ -7,13 +7,13 @@ export function buildSiteFeatures(t) {
   return [
     { id: 'feat-messenger', title: t('nav_messenger'), subtitle: t('dash_chat'), category: 'features', keywords: 'мессенджер чат сообщения messenger chat', kind: 'page', target: '/messenger' },
     { id: 'feat-obsidian', title: t('nav_obsidian'), subtitle: 'NeuroVault', category: 'features', keywords: 'obsidian neurovault заметки vault синхронизация', kind: 'page', target: '/obsidian' },
-    { id: 'feat-ai-chat', title: t('nav_ai_chat'), subtitle: t('dash_ai_bot'), category: 'features', keywords: 'ai чат бот ollama ассистент gpt', kind: 'page', target: '/chat' },
+    { id: 'feat-ai-chat', title: t('nav_ai_chat'), subtitle: t('home_knowledge_title'), category: 'features', keywords: 'вопрос по заметкам источники база знаний', kind: 'page', target: '/obsidian' },
     { id: 'feat-dashboard', title: t('nav_dashboard'), subtitle: t('dash_home'), category: 'features', keywords: 'дашборд главная dashboard home', kind: 'page', target: '/dashboard' },
     { id: 'feat-about', title: t('nav_about'), subtitle: '', category: 'features', keywords: 'о проекте about', kind: 'page', target: '/about' },
     { id: 'feat-team', title: t('dash_team'), subtitle: '', category: 'features', keywords: 'команда team разработчики', kind: 'modal', target: 'team' },
     { id: 'feat-docs', title: t('dash_docs'), subtitle: t('dash_files'), category: 'features', keywords: 'документы файлы upload загрузка docs files', kind: 'modal', target: 'docs' },
     { id: 'feat-links', title: t('dash_links'), subtitle: t('dash_links_widget'), category: 'features', keywords: 'ссылки быстрые links', kind: 'modal', target: 'links' },
-    { id: 'feat-parser', title: t('dash_parser'), subtitle: '', category: 'features', keywords: 'парсинг парсер scrape parser url сайт', kind: 'modal', target: 'parser' },
+    { id: 'feat-notes', title: t('nav_obsidian'), subtitle: t('demo_notes_label'), category: 'features', keywords: 'база знаний заметки obsidian', kind: 'page', target: '/obsidian' },
     { id: 'feat-tasks', title: t('dash_tasks'), subtitle: t('tasks_modal_title'), category: 'features', keywords: 'задачи todo tasks приоритет', kind: 'modal', target: 'tasks' },
     { id: 'feat-calendar', title: t('dash_calendar'), subtitle: t('calendar_title'), category: 'features', keywords: 'календарь события calendar events', kind: 'modal', target: 'tracker' },
     { id: 'feat-settings', title: t('dash_settings'), subtitle: t('settings_language'), category: 'features', keywords: 'настройки язык localization lang settings sazlamalar', kind: 'modal', target: 'settings' },
@@ -89,20 +89,6 @@ export function searchDashboard(query, { t, tasks = [], files = [], links = [], 
         kind: 'event',
         target: 'tracker',
         payload: { date: event.date },
-      });
-    }
-  }
-
-  for (const entry of parserHistory) {
-    if (matchQuery(q, entry.url, entry.title)) {
-      results.push({
-        id: `parser-${entry.url}`,
-        title: entry.title || entry.url,
-        subtitle: t('dash_parser'),
-        category: 'parser',
-        kind: 'modal',
-        target: 'parser',
-        payload: { url: entry.url },
       });
     }
   }

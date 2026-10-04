@@ -8,16 +8,18 @@ export async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    return await fetch(url, { ...options, signal: controller.signal });
+    return await fetch(url, {
+      credentials: 'include',
+      ...options,
+      signal: controller.signal,
+    });
   } finally {
     clearTimeout(timer);
   }
 }
 
 export async function apiFetch(path, options = {}, timeoutMs = 15000) {
-  const urls = API_BASE
-    ? [`${API_BASE}${path}`]
-    : [`${path}`, `${API_DIRECT}${path}`];
+  const urls = API_BASE ? [`${API_BASE}${path}`] : [path];
 
   let lastError;
   for (const url of urls) {

@@ -50,7 +50,7 @@ export default function KnowledgeGraph3D({ graph, onNodeClick, wordsSuffix = ' Ñ
 
   useEffect(() => {
     if (!fgRef.current || !graphData.nodes.length) return undefined;
-    const distance = Math.max(320, Math.min(900, graphData.nodes.length * 42));
+    const distance = Math.max(160, Math.min(380, 70 + graphData.nodes.length * 8));
     const timer = window.setTimeout(() => {
       fgRef.current?.cameraPosition(
         { x: distance * 0.15, y: distance * 0.1, z: distance },

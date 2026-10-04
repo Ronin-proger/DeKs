@@ -2,10 +2,11 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 
 from database import get_connection, init_db
+from security import require_self
 
 router = APIRouter(prefix="/api/workspace", tags=["workspace"])
 
@@ -101,21 +102,14 @@ def _fetch_sales_points(conn, user_id: int) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def _ensure_sales_defaults(conn, user_id: int) -> list[dict]:
-    existing = _fetch_sales_points(conn, user_id)
-    if existing:
-        return existing
-
-    for idx, (label, value) in enumerate(DEFAULT_SALES_POINTS):
-        conn.execute(
-            """
-            INSERT INTO user_sales_points (user_id, label, value, sort_order)
-            VALUES (?, ?, ?, ?)
-            """,
-            (user_id, label, value, idx),
-        )
-    conn.commit()
-    return _fetch_sales_points(conn, user_id)
+def _sales_points(conn, user_id: int) -> list[dict]:
+    points = _fetch_sales_points(conn, user_id)
+    series = [(point["label"], float(point["value"])) for point in points]
+    if series == list(DEFAULT_SALES_POINTS):
+        conn.execute("DELETE FROM user_sales_points WHERE user_id = ?", (user_id,))
+        conn.commit()
+        return []
+    return points
 
 
 def _fetch_shared_links(conn) -> list[dict]:
@@ -179,7 +173,8 @@ def _fetch_task_by_id(conn, task_id: int) -> dict | None:
 
 
 @router.get("/{user_id}")
-def get_workspace(user_id: int):
+def get_workspace(user_id: int, request: Request):
+    require_self(request, user_id)
     init_db()
     with get_connection() as conn:
         _user_exists(conn, user_id)
@@ -190,7 +185,7 @@ def get_workspace(user_id: int):
             (user_id,),
         ).fetchall()]
         files = _fetch_shared_files(conn)
-        sales_points = _ensure_sales_defaults(conn, user_id)
+        sales_points = _sales_points(conn, user_id)
     return {
         "success": True,
         "links": links,
@@ -202,7 +197,8 @@ def get_workspace(user_id: int):
 
 
 @router.post("/{user_id}/links")
-def add_link(user_id: int, body: LinkBody):
+def add_link(user_id: int, body: LinkBody, request: Request):
+    require_self(request, user_id)
     title = body.title.strip()
     url = _normalize_url(body.url)
     if not title or not url:
@@ -231,7 +227,8 @@ def add_link(user_id: int, body: LinkBody):
 
 
 @router.delete("/{user_id}/links/{link_id}")
-def delete_link(user_id: int, link_id: int):
+def delete_link(user_id: int, link_id: int, request: Request):
+    require_self(request, user_id)
     init_db()
     with get_connection() as conn:
         _user_exists(conn, user_id)
@@ -244,7 +241,8 @@ def delete_link(user_id: int, link_id: int):
 
 
 @router.post("/{user_id}/tasks")
-def add_task(user_id: int, body: TaskBody):
+def add_task(user_id: int, body: TaskBody, request: Request):
+    require_self(request, user_id)
     text = body.text.strip()
     if not text:
         raise HTTPException(status_code=400, detail="Текст задачи обязателен")
@@ -263,7 +261,8 @@ def add_task(user_id: int, body: TaskBody):
 
 
 @router.patch("/{user_id}/tasks/{task_id}")
-def patch_task(user_id: int, task_id: int, body: TaskPatch):
+def patch_task(user_id: int, task_id: int, body: TaskPatch, request: Request):
+    require_self(request, user_id)
     init_db()
     with get_connection() as conn:
         _user_exists(conn, user_id)
@@ -283,7 +282,8 @@ def patch_task(user_id: int, task_id: int, body: TaskPatch):
 
 
 @router.delete("/{user_id}/tasks/{task_id}")
-def delete_task(user_id: int, task_id: int):
+def delete_task(user_id: int, task_id: int, request: Request):
+    require_self(request, user_id)
     init_db()
     with get_connection() as conn:
         _user_exists(conn, user_id)
@@ -296,7 +296,8 @@ def delete_task(user_id: int, task_id: int):
 
 
 @router.post("/{user_id}/events")
-def add_event(user_id: int, body: EventBody):
+def add_event(user_id: int, body: EventBody, request: Request):
+    require_self(request, user_id)
     title = body.title.strip()
     if not title or not body.eventDate:
         raise HTTPException(status_code=400, detail="Укажите название и дату")
@@ -322,7 +323,8 @@ def add_event(user_id: int, body: EventBody):
 
 
 @router.delete("/{user_id}/events/{event_id}")
-def delete_event(user_id: int, event_id: int):
+def delete_event(user_id: int, event_id: int, request: Request):
+    require_self(request, user_id)
     init_db()
     with get_connection() as conn:
         conn.execute("DELETE FROM user_events WHERE id = ? AND user_id = ?", (event_id, user_id))
@@ -331,7 +333,8 @@ def delete_event(user_id: int, event_id: int):
 
 
 @router.post("/{user_id}/files")
-async def upload_file(user_id: int, file: UploadFile = File(...)):
+async def upload_file(user_id: int, request: Request, file: UploadFile = File(...)):
+    require_self(request, user_id)
     init_db()
     filename = file.filename or "file"
     ext = Path(filename).suffix.lower()
@@ -377,7 +380,8 @@ async def upload_file(user_id: int, file: UploadFile = File(...)):
 
 
 @router.delete("/{user_id}/files/{file_id}")
-def delete_file(user_id: int, file_id: int):
+def delete_file(user_id: int, file_id: int, request: Request):
+    require_self(request, user_id)
     init_db()
     with get_connection() as conn:
         _user_exists(conn, user_id)
@@ -396,7 +400,8 @@ def delete_file(user_id: int, file_id: int):
 
 
 @router.put("/{user_id}/sales-chart")
-def save_sales_chart(user_id: int, body: SalesChartBody):
+def save_sales_chart(user_id: int, body: SalesChartBody, request: Request):
+    require_self(request, user_id)
     if not body.points:
         raise HTTPException(status_code=400, detail="Добавьте хотя бы одну точку")
 

@@ -1,13 +1,13 @@
 import uuid
-from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 
 from database import get_connection, init_db
 from schemas import ProfileUpdateRequest
+from security import require_self
 
-from user_utils import serialize_user_public
+from user_utils import serialize_user_self
 
 router = APIRouter(prefix="/api/profile", tags=["profile"])
 
@@ -19,7 +19,7 @@ MAX_AVATAR_SIZE = 2 * 1024 * 1024
 
 
 def _serialize_user(row) -> dict:
-    return serialize_user_public(row)
+    return serialize_user_self(row)
 
 
 def _get_user(conn, user_id: int):
@@ -30,45 +30,24 @@ def _get_user(conn, user_id: int):
 
 
 @router.get("/{user_id}")
-def get_profile(user_id: int):
+def get_profile(user_id: int, request: Request):
+    require_self(request, user_id)
     init_db()
     with get_connection() as conn:
         user = _get_user(conn, user_id)
         return {"success": True, "user": _serialize_user(user)}
 
 
-def _normalize_birth_date(value: str | None) -> str | None:
-    if not value or not value.strip():
-        return None
-
-    birth_date = value.strip()
-    try:
-        parsed = datetime.strptime(birth_date, "%Y-%m-%d")
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail="Некорректная дата рождения") from exc
-
-    if parsed.year < 1900 or parsed.date() > datetime.now().date():
-        raise HTTPException(status_code=400, detail="Некорректная дата рождения")
-
-    return birth_date
-
-
 @router.put("/{user_id}")
-def update_profile(user_id: int, body: ProfileUpdateRequest):
+def update_profile(user_id: int, body: ProfileUpdateRequest, request: Request):
+    require_self(request, user_id)
     init_db()
     with get_connection() as conn:
         _get_user(conn, user_id)
-
         position = body.position.strip() if body.position else ""
-        birth_date = _normalize_birth_date(body.birthDate)
-
         conn.execute(
-            """
-            UPDATE users
-            SET position = ?, birthDate = ?
-            WHERE id = ?
-            """,
-            (position, birth_date, user_id),
+            "UPDATE users SET position = ? WHERE id = ?",
+            (position, user_id),
         )
         conn.commit()
         user = _get_user(conn, user_id)
@@ -76,7 +55,7 @@ def update_profile(user_id: int, body: ProfileUpdateRequest):
 
 
 @router.post("/{user_id}/avatar")
-async def upload_avatar(user_id: int, file: UploadFile = File(...)):
+async def upload_avatar(user_id: int, request: Request, file: UploadFile = File(...)):
     init_db()
     filename = file.filename or ""
     ext = Path(filename).suffix.lower()
@@ -86,6 +65,7 @@ async def upload_avatar(user_id: int, file: UploadFile = File(...)):
             detail="Разрешены только JPG, JPEG, PNG, WEBP",
         )
 
+    require_self(request, user_id)
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="Файл пустой")

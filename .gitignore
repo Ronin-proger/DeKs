@@ -11,9 +11,17 @@ HAC/.obsidian/plugins/obsidian-local-rest-api/data.json
 
 # локальные данные
 *.db
+*.db-shm
+*.db-wal
 server/uploads/
 __pycache__/
 *.py[cod]
+
+# кэш моделей
+.ollama/
+models/
+*.gguf
+*.onnx
 
 # сборка
 client/dist/

@@ -23,6 +23,12 @@ import LanguageSwitcher from '../components/LanguageSwitcher';
 import MarkdownMessage from '../components/MarkdownMessage';
 import SalesLineChart, { computeSalesStats, formatSalesValue } from '../components/SalesLineChart';
 import SalesChartEditor from '../components/SalesChartEditor';
+import TasksPanel from './dashboard/TasksPanel';
+import CalendarPanel from './dashboard/CalendarPanel';
+import FilesPanel from './dashboard/FilesPanel';
+import MetricsPanel from './dashboard/MetricsPanel';
+import PanelState from './dashboard/PanelState';
+import { setDisplayUser } from '../utils/auth';
 
 const LINK_ICON_OPTIONS = [
   { id: 'link', Icon: Link2 },
@@ -178,8 +184,12 @@ const DashboardPage = () => {
   const [selectedDate, setSelectedDate] = useState(() => toDateKey(new Date()));
   const [fileUploading, setFileUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [user, setUser] = useState(() => loadStoredUser());
-  const [profileForm, setProfileForm] = useState({ position: '', birthDate: '' });
+  const [user, setUser] = useState(null);
+  const [profileForm, setProfileForm] = useState({ position: '' });
+  const [workspaceStatus, setWorkspaceStatus] = useState('loading');
+  const [knowledge, setKnowledge] = useState(null);
+  const [knowledgeStatus, setKnowledgeStatus] = useState('loading');
+  const [metricsEditing, setMetricsEditing] = useState(false);
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
@@ -216,10 +226,24 @@ const DashboardPage = () => {
   }, [lang, t]);
 
   useEffect(() => {
-    if (!user?.id) {
-      navigate('/login');
-    }
-  }, [user, navigate]);
+    let live = true;
+    apiFetch('/api/me')
+      .then(async (response) => {
+        if (!live) return;
+        if (!response.ok) {
+          navigate('/login');
+          return;
+        }
+        const data = await parseApiResponse(response);
+        setUser(data.user);
+        setDisplayUser(data.user);
+        setProfileForm({ position: data.user.position || '' });
+      })
+      .catch(() => {
+        if (live) navigate('/login');
+      });
+    return () => { live = false; };
+  }, [navigate]);
 
   useEffect(() => {
     if (!user?.id) return undefined;
@@ -227,6 +251,7 @@ const DashboardPage = () => {
     let cancelled = false;
 
     const loadWorkspace = async () => {
+      setWorkspaceStatus('loading');
       try {
         const response = await apiFetch(`/api/workspace/${user.id}`);
         const data = await parseApiResponse(response);
@@ -236,14 +261,41 @@ const DashboardPage = () => {
         setEvents(data.events || []);
         setFiles(data.files || []);
         setSalesPoints(data.salesPoints || []);
+        setWorkspaceStatus('ready');
       } catch {
-        // keep empty lists on error
+        if (!cancelled) setWorkspaceStatus('error');
       }
     };
 
     loadWorkspace();
     return () => { cancelled = true; };
   }, [user?.id]);
+
+  const loadKnowledge = useCallback(async () => {
+    setKnowledgeStatus('loading');
+    try {
+      const response = await apiFetch('/api/intelligence/analytics');
+      const data = await response.json();
+      const summary = data?.analytics?.summary;
+      if (!response.ok || !data.success || !summary) {
+        setKnowledge(null);
+      } else {
+        setKnowledge({
+          notes: summary.notesTotal || 0,
+          orphans: summary.orphansCount || 0,
+        });
+      }
+      setKnowledgeStatus('ready');
+    } catch {
+      setKnowledgeStatus('error');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!user?.id) return undefined;
+    loadKnowledge();
+    return undefined;
+  }, [user?.id, loadKnowledge]);
 
   const reloadWorkspace = useCallback(async () => {
     if (!user?.id) return;
@@ -310,10 +362,9 @@ const DashboardPage = () => {
         if (cancelled) return;
         if (data.success && data.user) {
           setUser(data.user);
-          localStorage.setItem('user', JSON.stringify(data.user));
+          setDisplayUser(data.user);
           setProfileForm({
             position: data.user.position || '',
-            birthDate: data.user.birthDate || '',
           });
         }
       } catch (error) {
@@ -322,7 +373,6 @@ const DashboardPage = () => {
           setProfileMessageType('error');
           setProfileForm({
             position: user.position || '',
-            birthDate: user.birthDate || '',
           });
         }
       } finally {
@@ -336,6 +386,7 @@ const DashboardPage = () => {
 
   const openModal = (name) => {
     if (name === 'imageModal') {
+      setMetricsEditing(salesPoints.length > 0);
       setSalesDraft(salesPoints.map((p) => ({ label: p.label, value: p.value })));
       setSalesMessage('');
       setSalesMessageType('');
@@ -408,14 +459,6 @@ const DashboardPage = () => {
   const handleSaveProfile = async () => {
     if (!user?.id) return;
 
-    const birthDate = profileForm.birthDate?.trim() || null;
-
-    if (birthDate && !/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) {
-      setProfileMessage(t('profile_birth_invalid'));
-      setProfileMessageType('error');
-      return;
-    }
-
     setProfileSaving(true);
     setProfileMessage('');
     try {
@@ -424,16 +467,14 @@ const DashboardPage = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           position: profileForm.position.trim(),
-          birthDate,
         }),
       });
       const data = await parseApiResponse(response);
       if (data.success && data.user) {
         setUser(data.user);
-        localStorage.setItem('user', JSON.stringify(data.user));
+        setDisplayUser(data.user);
         setProfileForm({
           position: data.user.position || '',
-          birthDate: data.user.birthDate || '',
         });
         setProfileMessage(t('profile_saved'));
         setProfileMessageType('success');
@@ -577,7 +618,7 @@ const DashboardPage = () => {
       const data = await parseApiResponse(response);
       if (data.success && data.user) {
         setUser(data.user);
-        localStorage.setItem('user', JSON.stringify(data.user));
+        setDisplayUser(data.user);
         setProfileMessage(t('profile_avatar_ok'));
         setProfileMessageType('success');
       }
@@ -840,9 +881,9 @@ const DashboardPage = () => {
                 <Link2 size={20} />
                 <span>{t('dash_links')}</span>
               </div>
-              <div className="nav-item" onClick={() => openModal("parser")}>
-                <Database size={20} />
-                <span>{t('dash_parser')}</span>
+              <div className="nav-item" onClick={() => openModal('imageModal')}>
+                <BarChart3 size={20} />
+                <span>{t('dash_metrics')}</span>
               </div>
               <div className="nav-item" onClick={() => navigate("/messenger")}>
                 <MessageCircle size={20} />
@@ -856,10 +897,6 @@ const DashboardPage = () => {
               <div className="nav-item" onClick={() => navigate("/obsidian")}>
                 <BookOpen size={20} />
                 <span>{t('nav_obsidian')}</span>
-              </div>
-              <div className="nav-item" onClick={() => navigate('/chat')}>
-                <Bot size={20} />
-                <span>{t('dash_ai_bot')}</span>
               </div>
               <div className={`nav-item ${activeModal === 'settings' ? 'active' : ''}`} onClick={() => openModal("settings")}>
                 <Settings size={20} />
@@ -943,264 +980,58 @@ const DashboardPage = () => {
             </div>
 
             <div className="widgets-grid">
-              <div 
-                className="widget widget-hero"
-                style={{
-                  backgroundImage: 'url(/analytics-hero.jpg)',
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                  backgroundRepeat: 'no-repeat'
-                }}
-              >
-                <div className="hero-content" style={{ background: 'rgba(0,0,0,0.4)' }}>
-                  <div className="hero-text">
-                    <span className="hero-badge">{t('dash_hero_badge')}</span>
-                    <h2>{t('dash_hero_title')}</h2>
-                    <p>{t('dash_hero_desc')}</p>
-                    <button className="hero-btn" onClick={() => openModal('imageModal')}>
-                      <TrendingUp size={16} /> {t('dash_hero_btn')}
-                    </button>
-                  </div>
-                  <div className="hero-image">
-                    <div className="hero-chart"></div>
-                  </div>
-                </div>
-              </div>
-
-         
-              <div 
-                className="widget widget-ai"
-                style={{
-                  backgroundImage: 'url(/assistant-hero.jpg)',
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                  backgroundRepeat: 'no-repeat'
-                }}
-              >
-                <div className="ai-content" style={{ background: 'rgba(0,0,0,0.6)' }}>
-                  <div className="ai-header">
-                    <span className="ai-badge">AI</span>
-                    <span className="ai-status">{t('dash_ai_online')}</span>
-                  </div>
-                  <div className="ai-avatar">
-                    <Bot size={32} />
-                  </div>
-                  <h3>{t('dash_ai_title')}</h3>
-                  <p>{t('dash_ai_desc')}</p>
-                  <button className="widget-btn" onClick={() => navigate('/chat')}>
-                    <MessageCircle size={14} /> {t('dash_ai_open')}
-                  </button>
-                </div>
-              </div>
-
-              <div className="widget widget-tasks">
-                <div className="widget-header">
-                  <span className="widget-title">
-                    <CheckCircle size={16} />
-                    {t('dash_tasks')}
-                  </span>
-                  <span className="widget-badge">{t('dash_tasks_left', { count: tasks.filter(tk => !tk.done).length })}</span>
-                </div>
-                <div className="task-list">
-                  {tasks.map(task => (
-                    <div key={task.id} className={`task-item ${task.done ? 'done' : ''}`}>
-                      <div className="task-left">
-                        <input 
-                          type="checkbox" 
-                          checked={task.done} 
-                          onChange={() => toggleTask(task.id)} 
-                        />
-                        <span
-                          className="task-text"
-                          onClick={() => toggleTask(task.id)}
-                          onKeyDown={(e) => e.key === 'Enter' && toggleTask(task.id)}
-                          role="button"
-                          tabIndex={0}
-                        >
-                          {task.text}
-                        </span>
-                      </div>
-                      <div className="task-right">
-                        <span className={`priority-dot ${task.priority}`}></span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <button className="widget-btn" onClick={() => openModal('tasks')}>
-                  <Plus size={14} /> {t('dash_add_task')}
-                </button>
-              </div>
-
-              <div className="widget widget-graph">
-                <div className="widget-header">
-                  <span className="widget-title">
-                    <BarChart3 size={16} />
-                    {t('dash_graph_title')}
-                  </span>
-                  <button
-                    type="button"
-                    className="widget-action"
-                    title={t('action_open')}
-                    onClick={reloadWorkspace}
-                  >
-                    <RefreshCw size={14} />
-                  </button>
-                </div>
-                <div className="graph-content">
-                  <div 
-                    className="graph-image"
-                    style={{
-      backgroundImage: 'url(/chart.jpg)',
-      backgroundSize: 'contain',
-      backgroundPosition: 'center',
-      backgroundRepeat: 'no-repeat'
-    }}
-                  ></div>
-                  <div className="graph-stats">
-                    <div className="graph-stat">
-                      <span className="graph-label">{t('dash_graph_revenue')}</span>
-                      <span className="graph-value">
-                        {t('chart_revenue_fmt', {
-                          value: formatSalesValue(salesStats.last, locale),
-                        })}
-                      </span>
-                    </div>
-                    <div className="graph-stat">
-                      <span className="graph-label">{t('dash_graph_growth')}</span>
-                      <span className={`graph-value ${salesStats.growth < 0 ? 'negative' : ''}`}>
-                        {salesStats.growth >= 0 ? '+' : ''}
-                        {t('chart_growth_fmt', { value: salesStats.growth.toFixed(1) })}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <button className="widget-btn" onClick={() => openModal('imageModal')}>
-                  <Eye size={14} /> {t('dash_graph_open')}
-                </button>
-              </div>
-
-              {/* Links Card */}
-              <div className="widget widget-links">
-                <div className="widget-header">
-                  <span className="widget-title">
-                    <Link2 size={16} />
-                    {t('dash_links_widget')}
-                  </span>
-                  <button className="widget-action" onClick={() => openModal('links')}>
-                    <Plus size={14} />
-                  </button>
-                </div>
-                <div className="quick-links">
-                  {links.map(link => (
-                    <a key={link.id} href={link.url} target="_blank" rel="noopener noreferrer" className="quick-link">
-                      <span className="quick-link-icon"><LinkIconView icon={link.icon} size={14} /></span>
-                      {link.title}
-                    </a>
-                  ))}
-                </div>
-                <button className="widget-btn" onClick={() => openModal('links')}>
-                  <Globe size={14} /> {t('dash_manage')}
-                </button>
-              </div>
-
-              {/* Analytics Card */}
+              <TasksPanel
+                mode="today"
+                tasks={tasks}
+                todayKey={todayKey}
+                status={workspaceStatus}
+                t={t}
+                onRetry={reloadWorkspace}
+                onOpen={() => openModal('tasks')}
+                onToggle={toggleTask}
+              />
+              <CalendarPanel
+                mode="next"
+                events={events}
+                todayKey={todayKey}
+                status={workspaceStatus}
+                t={t}
+                formatDate={formatDate}
+                onRetry={reloadWorkspace}
+                onOpen={() => openModal('tracker')}
+              />
+              <FilesPanel
+                mode="recent"
+                files={files}
+                status={workspaceStatus}
+                t={t}
+                onRetry={reloadWorkspace}
+                onOpen={() => openModal('docs')}
+              />
               <div className="widget widget-analytics">
                 <div className="widget-header">
                   <span className="widget-title">
-                    <Activity size={16} />
-                    {t('dash_analytics_title')}
+                    <BookOpen size={16} />
+                    {t('home_knowledge_title')}
                   </span>
                 </div>
-                <div className="analytics-stats">
-                  <div className="analytics-item">
-                    <span className="analytics-label">{t('dash_analytics_active')}</span>
-                    <span className="analytics-value">12</span>
-                    <div className="progress-bar">
-                      <div className="progress-fill" style={{ width: '60%' }}></div>
-                    </div>
-                  </div>
-                  <div className="analytics-item">
-                    <span className="analytics-label">{t('dash_analytics_done')}</span>
-                    <span className="analytics-value">47</span>
-                    <div className="progress-bar">
-                      <div className="progress-fill" style={{ width: '85%' }}></div>
-                    </div>
-                  </div>
-                  <div className="analytics-item">
-                    <span className="analytics-label">{t('dash_analytics_in_progress')}</span>
-                    <span className="analytics-value">8</span>
-                    <div className="progress-bar">
-                      <div className="progress-fill" style={{ width: '40%' }}></div>
-                    </div>
-                  </div>
-                </div>
-                <button className="widget-btn" onClick={() => navigate('/obsidian')}>
-                  <BookOpen size={14} /> {t('dash_open_obsidian')}
-                </button>
-              </div>
-
-              {/* Files Card */}
-              <div className="widget widget-files">
-                <div className="widget-header">
-                  <span className="widget-title">
-                    <Folder size={16} />
-                    {t('dash_files')}
-                  </span>
-                  <button className="widget-action" onClick={() => openModal('docs')}>
-                    <Upload size={14} />
-                  </button>
-                </div>
-                <div className="files-list">
-                  {files.slice(0, 3).map((file) => (
-                    <div key={file.id} className="file-item">
-                      <FileText size={14} />
-                      <span className="file-name">{file.originalName}</span>
-                      <span className="file-size">{(file.size / 1024).toFixed(1)} KB</span>
-                    </div>
-                  ))}
-                  {files.length === 0 && (
-                    <div className="files-empty">
-                      <span>{t('dash_no_files')}</span>
-                    </div>
-                  )}
-                </div>
-                <button className="widget-btn" onClick={() => openModal('docs')}>
-                  <FileText size={14} /> {t('dash_manage')}
-                </button>
-              </div>
-
-              {/* Calendar Card */}
-              <div className="widget widget-calendar">
-                <div className="widget-header">
-                  <span className="widget-title">
-                    <Calendar size={16} />
-                    {t('dash_calendar')}
-                  </span>
-                </div>
-                <div className="calendar-mini">
-                  <div className="calendar-days">
-                    {weekdays.map((day) => (
-                      <div key={day} className="calendar-day-header">{day}</div>
-                    ))}
-                    {miniGrid.map((day, idx) => {
-                      if (!day) return <div key={`e-${idx}`} className="calendar-day empty" />;
-                      const key = toDateKey(new Date(new Date().getFullYear(), new Date().getMonth(), day));
-                      const hasEvents = (eventsByDate[key] || []).length > 0;
-                      return (
-                        <div
-                          key={key}
-                          className={`calendar-day ${key === todayKey ? 'today' : ''} ${hasEvents ? 'has-event' : ''}`}
-                        >
-                          {day}
-                          {hasEvents && <span className="day-dot" />}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-                <button className="widget-btn" onClick={() => openModal('tracker')}>
-                  <Calendar size={14} /> {t('dash_open_calendar')}
-                </button>
+                {knowledgeStatus === 'loading' && <PanelState text={t('panel_loading')} />}
+                {knowledgeStatus === 'error' && (
+                  <PanelState text={t('panel_error')} actionLabel={t('panel_retry')} onAction={loadKnowledge} />
+                )}
+                {knowledgeStatus === 'ready' && !knowledge && (
+                  <PanelState text={t('home_knowledge_empty')} actionLabel={t('home_knowledge_open')} onAction={() => navigate('/obsidian')} />
+                )}
+                {knowledgeStatus === 'ready' && knowledge && (
+                  <>
+                    <p className="home-knowledge-line">
+                      {t('home_knowledge_line', { notes: knowledge.notes, orphans: knowledge.orphans })}
+                    </p>
+                    <button type="button" className="widget-btn" onClick={() => navigate('/obsidian')}>
+                      {t('home_knowledge_open')}
+                    </button>
+                  </>
+                )}
               </div>
             </div>
 
@@ -1837,18 +1668,24 @@ const DashboardPage = () => {
       )}
 
       {activeModal === 'imageModal' && (
-        <DashboardModal onClose={closeModal} title={t('chart_modal_title')} width="640px">
-          <div className="image-modal-content">
-            <p className="chart-title">{t('chart_subtitle')}</p>
-            <SalesChartEditor
-              draftPoints={salesDraft}
-              onChange={setSalesDraft}
-              onSave={handleSaveSalesChart}
-              saving={salesSaving}
-              message={salesMessage}
-              messageType={salesMessageType}
-            />
-          </div>
+        <DashboardModal onClose={closeModal} title={t('home_add_metric')} width="640px">
+          <MetricsPanel
+            points={salesPoints}
+            editing={metricsEditing}
+            onStart={() => {
+              setMetricsEditing(true);
+              setSalesDraft((prev) => (prev.length ? prev : [{ label: '', value: 0 }]));
+            }}
+            draftPoints={salesDraft}
+            onChange={setSalesDraft}
+            onSave={handleSaveSalesChart}
+            saving={salesSaving}
+            message={salesMessage}
+            messageType={salesMessageType}
+            status={workspaceStatus}
+            t={t}
+            onRetry={reloadWorkspace}
+          />
         </DashboardModal>
       )}
 
@@ -1896,8 +1733,7 @@ const DashboardPage = () => {
                   </span>
                 </button>
 
-                <h3 className="profile-name">{user?.fullName || t('common_dash')}</h3>
-                <p className="profile-email">{user?.email || t('common_dash')}</p>
+                <h3 className="profile-name">{user?.fullName || ''}</h3>
 
                 <div className="profile-form">
                   <label className="profile-field">
@@ -1910,23 +1746,6 @@ const DashboardPage = () => {
                       maxLength={120}
                     />
                   </label>
-                  <label className="profile-field">
-                    <span>{t('profile_birthdate')}</span>
-                    <input
-                      type="date"
-                      value={profileForm.birthDate}
-                      onChange={(e) => setProfileForm((prev) => ({ ...prev, birthDate: e.target.value }))}
-                      max={new Date().toISOString().slice(0, 10)}
-                      min="1900-01-01"
-                    />
-                  </label>
-                </div>
-
-                <div className="profile-details">
-                  <div className="detail-item">
-                    <span className="detail-label">{t('profile_registered')}</span>
-                    <span className="detail-value">{formatDate(user?.createdAt)}</span>
-                  </div>
                 </div>
 
                 {profileMessage && (

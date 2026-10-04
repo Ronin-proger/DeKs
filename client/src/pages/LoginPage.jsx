@@ -1,6 +1,7 @@
 ﻿import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { apiFetch, parseApiResponse } from '../config/api';
+import { setDisplayUser } from '../utils/auth';
 import { useToast } from '../context/ToastContext';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -28,7 +29,7 @@ const LoginPage = () => {
     setIsLoading(true);
 
     try {
-      const response = await apiFetch('/api/check-login', {
+      const response = await apiFetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -40,7 +41,7 @@ const LoginPage = () => {
       const data = await parseApiResponse(response);
 
       if (data.success) {
-        localStorage.setItem('user', JSON.stringify(data.user));
+        setDisplayUser(data.user);
         toast.success(t('toast_welcome'));
         setTimeout(() => navigate('/dashboard'), 400);
       } else {

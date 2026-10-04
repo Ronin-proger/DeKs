@@ -24,7 +24,8 @@ function formatProfileDate(iso, locale, fallback) {
 }
 
 export default function UserProfileModal({ userId, currentUserId, onClose, onMessage }) {
-  const { t, locale } = useLanguage();
+  const { t } = useLanguage();
+  const isSelf = Number(userId) === Number(currentUserId);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -39,7 +40,8 @@ export default function UserProfileModal({ userId, currentUserId, onClose, onMes
 
     (async () => {
       try {
-        const response = await apiFetch(`/api/profile/${userId}`);
+        const path = isSelf ? `/api/profile/${userId}` : `/api/colleagues/${userId}`;
+        const response = await apiFetch(path);
         const data = await parseApiResponse(response);
         if (cancelled) return;
         if (data.success && data.user) {
@@ -55,11 +57,10 @@ export default function UserProfileModal({ userId, currentUserId, onClose, onMes
     })();
 
     return () => { cancelled = true; };
-  }, [userId, t]);
+  }, [userId, isSelf, t]);
 
   if (!userId) return null;
 
-  const isSelf = Number(userId) === Number(currentUserId);
   const empty = t('profile_not_set');
 
   return (
@@ -93,25 +94,12 @@ export default function UserProfileModal({ userId, currentUserId, onClose, onMes
                 )}
               </div>
 
-              <h3 className="user-profile-name">{profile.fullName || t('common_dash')}</h3>
-              <p className="user-profile-email">{profile.email || t('common_dash')}</p>
+              <h3 className="user-profile-name">{profile.fullName || ''}</h3>
 
               <dl className="user-profile-details">
                 <div className="user-profile-row">
                   <dt>{t('profile_position')}</dt>
                   <dd>{profile.position?.trim() || empty}</dd>
-                </div>
-                <div className="user-profile-row">
-                  <dt>{t('profile_birthdate')}</dt>
-                  <dd>
-                    {profile.birthDate
-                      ? formatProfileDate(profile.birthDate, locale, empty)
-                      : empty}
-                  </dd>
-                </div>
-                <div className="user-profile-row">
-                  <dt>{t('profile_registered')}</dt>
-                  <dd>{formatProfileDate(profile.createdAt, locale, empty)}</dd>
                 </div>
               </dl>
 

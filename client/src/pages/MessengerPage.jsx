@@ -104,7 +104,7 @@ function MessengerPage() {
   }, [t]);
 
   const loadUsers = useCallback(async (userId) => {
-    const response = await apiFetch('/api/users');
+    const response = await apiFetch('/api/colleagues');
     const data = await parseResponse(response);
     if (data.success) {
       const currentId = Number(userId);
@@ -325,36 +325,31 @@ function MessengerPage() {
   };
 
   useEffect(() => {
-    const stored = localStorage.getItem('user');
-    if (!stored) {
-      navigate('/login');
-      return;
-    }
-
-    let parsed;
-    try {
-      parsed = JSON.parse(stored);
-    } catch {
-      localStorage.removeItem('user');
-      navigate('/login');
-      return;
-    }
-
-    const userId = Number(parsed?.id);
-    if (!userId) {
-      localStorage.removeItem('user');
-      navigate('/login');
-      return;
-    }
-
-    userIdRef.current = userId;
-    setUser({ ...parsed, id: userId });
-
-    Promise.all([loadRooms(userId), loadUsers(userId)]).catch((err) => {
-      setError(err.message || t('msg_load_fail'));
-    }).finally(() => {
-      setLoading(false);
-    });
+    let live = true;
+    apiFetch('/api/me')
+      .then(async (response) => {
+        if (!live) return;
+        if (!response.ok) {
+          navigate('/login');
+          return;
+        }
+        const data = await parseApiResponse(response);
+        const userId = Number(data.user?.id);
+        if (!userId) {
+          navigate('/login');
+          return;
+        }
+        userIdRef.current = userId;
+        setUser(data.user);
+        await Promise.all([loadRooms(userId), loadUsers(userId)]);
+      })
+      .catch((err) => {
+        if (live) setError(err.message || t('msg_load_fail'));
+      })
+      .finally(() => {
+        if (live) setLoading(false);
+      });
+    return () => { live = false; };
   }, [navigate, loadRooms, loadUsers, t]);
 
   const toggleUsersPicker = useCallback(async () => {

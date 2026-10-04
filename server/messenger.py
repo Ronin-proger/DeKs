@@ -1,7 +1,9 @@
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
+
+from security import require_self
 
 from database import get_connection, init_db
 from schemas import PrivateRoomRequest, SendMessageRequest
@@ -298,7 +300,8 @@ def _delete_private_room(conn, room_id: int, user_id: int) -> None:
 
 
 @router.get("/rooms")
-def list_rooms(userId: int = Query(..., ge=1)):
+def list_rooms(request: Request, userId: int = Query(..., ge=1)):
+    require_self(request, userId)
     init_db()
     with get_connection() as conn:
         if not _user_exists(conn, userId):
@@ -358,7 +361,8 @@ def list_rooms(userId: int = Query(..., ge=1)):
 
 
 @router.post("/rooms/private")
-def create_private_room(body: PrivateRoomRequest):
+def create_private_room(body: PrivateRoomRequest, request: Request):
+    require_self(request, body.userId)
     init_db()
     with get_connection() as conn:
         if not _user_exists(conn, body.userId):
@@ -366,7 +370,7 @@ def create_private_room(body: PrivateRoomRequest):
 
         room_id = _get_or_create_private_room(conn, body.userId, body.targetUserId)
         peer = conn.execute(
-            "SELECT id, fullName, email, avatarUrl FROM users WHERE id = ?",
+            "SELECT id, fullName, avatarUrl, position FROM users WHERE id = ?",
             (body.targetUserId,),
         ).fetchone()
         conn.commit()
@@ -380,7 +384,7 @@ def create_private_room(body: PrivateRoomRequest):
                 "peer": {
                     "id": peer["id"],
                     "fullName": peer["fullName"],
-                    "email": peer["email"],
+                    "position": peer["position"] or "",
                     "avatarUrl": peer["avatarUrl"] or None,
                 },
             },
@@ -389,10 +393,12 @@ def create_private_room(body: PrivateRoomRequest):
 
 @router.get("/rooms/{room_id}/messages")
 def get_messages(
+    request: Request,
     room_id: int,
     userId: int = Query(..., ge=1),
     after: int = Query(0, ge=0),
 ):
+    require_self(request, userId)
     init_db()
     with get_connection() as conn:
         if not _can_access_room(conn, room_id, userId):
@@ -415,7 +421,8 @@ def get_messages(
 
 
 @router.get("/unread")
-def get_unread(userId: int = Query(..., ge=1)):
+def get_unread(request: Request, userId: int = Query(..., ge=1)):
+    require_self(request, userId)
     init_db()
     with get_connection() as conn:
         if not _user_exists(conn, userId):
@@ -448,9 +455,11 @@ def get_unread(userId: int = Query(..., ge=1)):
 @router.post("/rooms/{room_id}/read")
 def mark_room_read(
     room_id: int,
+    request: Request,
     userId: int = Query(..., ge=1),
     lastMessageId: int = Query(0, ge=0),
 ):
+    require_self(request, userId)
     init_db()
     with get_connection() as conn:
         if not _can_access_room(conn, room_id, userId):
@@ -479,7 +488,8 @@ def mark_room_read(
 
 
 @router.delete("/rooms/{room_id}")
-def delete_private_room(room_id: int, userId: int = Query(..., ge=1)):
+def delete_private_room(room_id: int, request: Request, userId: int = Query(..., ge=1)):
+    require_self(request, userId)
     init_db()
     with get_connection() as conn:
         if not _user_exists(conn, userId):
@@ -491,7 +501,8 @@ def delete_private_room(room_id: int, userId: int = Query(..., ge=1)):
 
 
 @router.post("/rooms/{room_id}/messages")
-def send_message(room_id: int, body: SendMessageRequest):
+def send_message(room_id: int, body: SendMessageRequest, request: Request):
+    require_self(request, body.userId)
     content = body.content.strip()
     if not content:
         raise HTTPException(status_code=400, detail="Сообщение пустое")
@@ -522,10 +533,12 @@ def send_message(room_id: int, body: SendMessageRequest):
 @router.post("/rooms/{room_id}/files")
 async def send_file(
     room_id: int,
+    request: Request,
     userId: int = Form(...),
     file: UploadFile = File(...),
     caption: str = Form(""),
 ):
+    require_self(request, userId)
     init_db()
     ext = _validate_extension(file.filename or "")
 
