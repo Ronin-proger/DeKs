@@ -31,6 +31,8 @@ const AboutPage = () => {
               <li>{t('about_feat_4')}</li>
               <li>{t('about_feat_5')}</li>
               <li>{t('about_feat_6')}</li>
+              <li>{t('about_feat_7')}</li>
+              <li>{t('about_feat_8')}</li>
             </ul>
           </div>
 
