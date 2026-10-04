@@ -946,7 +946,7 @@ const DashboardPage = () => {
               <div 
                 className="widget widget-hero"
                 style={{
-                  backgroundImage: 'url(/analitikbeb.jpg)',
+                  backgroundImage: 'url(/analytics-hero.jpg)',
                   backgroundSize: 'cover',
                   backgroundPosition: 'center',
                   backgroundRepeat: 'no-repeat'
@@ -971,7 +971,7 @@ const DashboardPage = () => {
               <div 
                 className="widget widget-ai"
                 style={{
-                  backgroundImage: 'url(/AIbotdi.jpg)',
+                  backgroundImage: 'url(/assistant-hero.jpg)',
                   backgroundSize: 'cover',
                   backgroundPosition: 'center',
                   backgroundRepeat: 'no-repeat'
@@ -1050,7 +1050,7 @@ const DashboardPage = () => {
                   <div 
                     className="graph-image"
                     style={{
-      backgroundImage: 'url(/chart.jpg)',  // 👈 обязательно url()
+      backgroundImage: 'url(/chart.jpg)',
       backgroundSize: 'contain',
       backgroundPosition: 'center',
       backgroundRepeat: 'no-repeat'
@@ -1230,26 +1230,24 @@ const DashboardPage = () => {
             <div className="team-member">
               <div className="member-avatar"><User size={20} /></div>
               <div>
-                <div className="member-name">Демочка А.</div>
-                <div className="member-role">Fulsteak</div>
+                <div className="member-name">{t('team_role_analytics')}</div>
+                <div className="member-role">{t('team_role_analytics_desc')}</div>
               </div>
-            </div>
-            <div className="team-member">
-             
             </div>
             <div className="team-member">
               <div className="member-avatar"><User size={20} /></div>
               <div>
-                <div className="member-name">Ксенофонтов А.</div>
-                <div className="member-role">Backend</div>
+                <div className="member-name">{t('team_role_knowledge')}</div>
+                <div className="member-role">{t('team_role_knowledge_desc')}</div>
               </div>
             </div>
             <div className="team-member">
-            
+              <div className="member-avatar"><User size={20} /></div>
               <div>
+                <div className="member-name">{t('team_role_comms')}</div>
+                <div className="member-role">{t('team_role_comms_desc')}</div>
               </div>
             </div>
-            <button className="primary-btn"><Plus size={16} /> {t('team_invite')}</button>
           </div>
         </DashboardModal>
       )}

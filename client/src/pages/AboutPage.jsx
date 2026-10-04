@@ -37,11 +37,11 @@ const AboutPage = () => {
           <div className="about-section">
             <h3>{t('about_tech_title')}</h3>
             <ul>
-              <li>React + Vite</li>
-              <li>Python + FastAPI</li>
-              <li>Obsidian Local REST API</li>
-              <li>Ollama + Qwen (AI)</li>
-              <li>Node.js</li>
+              <li>React, Vite</li>
+              <li>Python, FastAPI, SQLite</li>
+              <li>Хранилище знаний и синхронизация заметок</li>
+              <li>Локальная языковая модель, RAG, семантические связи</li>
+              <li>Трёхмерный граф знаний</li>
             </ul>
           </div>
 

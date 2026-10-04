@@ -129,7 +129,7 @@ function RegisterPage() {
       </div>
 
       <div className="login-right-half">
-        <img src="/glavvterter.jpg" alt="" />
+        <img src="/portal-hero.jpg" alt="" />
       </div>
     </div>
   );

@@ -15,7 +15,7 @@
 .chat-bg {
   position: absolute;
   inset: 0;
-  background-image: url('/portpichka.jpg');
+  background-image: url('/workspace-bg.jpg');
   background-size: cover;
   background-position: center;
   opacity: 0.15;
