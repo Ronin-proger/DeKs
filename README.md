@@ -6,6 +6,7 @@ Team workspace built around a shared Obsidian vault: tasks, calendar, files and 
 
 React · FastAPI · SQLite · Ollama · Docker Compose
 
+![Portal](docs/login.png)
 ![Workspace](docs/cabinet.png)
 
 ## Capabilities
