@@ -3,7 +3,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 
-from database import get_connection, init_db
+from database import get_connection
 from schemas import ProfileUpdateRequest
 from security import require_self
 
@@ -32,7 +32,6 @@ def _get_user(conn, user_id: int):
 @router.get("/{user_id}")
 def get_profile(user_id: int, request: Request):
     require_self(request, user_id)
-    init_db()
     with get_connection() as conn:
         user = _get_user(conn, user_id)
         return {"success": True, "user": _serialize_user(user)}
@@ -41,7 +40,6 @@ def get_profile(user_id: int, request: Request):
 @router.put("/{user_id}")
 def update_profile(user_id: int, body: ProfileUpdateRequest, request: Request):
     require_self(request, user_id)
-    init_db()
     with get_connection() as conn:
         _get_user(conn, user_id)
         position = body.position.strip() if body.position else ""
@@ -56,7 +54,6 @@ def update_profile(user_id: int, body: ProfileUpdateRequest, request: Request):
 
 @router.post("/{user_id}/avatar")
 async def upload_avatar(user_id: int, request: Request, file: UploadFile = File(...)):
-    init_db()
     filename = file.filename or ""
     ext = Path(filename).suffix.lower()
     if ext not in ALLOWED_AVATAR_EXT:

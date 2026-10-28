@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 
-from database import get_connection, init_db
+from database import get_connection
 from security import require_self
 
 router = APIRouter(prefix="/api/workspace", tags=["workspace"])
@@ -175,7 +175,6 @@ def _fetch_task_by_id(conn, task_id: int) -> dict | None:
 @router.get("/{user_id}")
 def get_workspace(user_id: int, request: Request):
     require_self(request, user_id)
-    init_db()
     with get_connection() as conn:
         _user_exists(conn, user_id)
         links = _fetch_shared_links(conn)
@@ -204,7 +203,6 @@ def add_link(user_id: int, body: LinkBody, request: Request):
     if not title or not url:
         raise HTTPException(status_code=400, detail="Укажите название и URL")
     icon = body.icon if body.icon in LINK_ICONS else LEGACY_LINK_ICONS.get(body.icon, "link")
-    init_db()
     with get_connection() as conn:
         _user_exists(conn, user_id)
         cur = conn.execute(
@@ -229,7 +227,6 @@ def add_link(user_id: int, body: LinkBody, request: Request):
 @router.delete("/{user_id}/links/{link_id}")
 def delete_link(user_id: int, link_id: int, request: Request):
     require_self(request, user_id)
-    init_db()
     with get_connection() as conn:
         _user_exists(conn, user_id)
         row = conn.execute("SELECT id FROM user_links WHERE id = ?", (link_id,)).fetchone()
@@ -247,7 +244,6 @@ def add_task(user_id: int, body: TaskBody, request: Request):
     if not text:
         raise HTTPException(status_code=400, detail="Текст задачи обязателен")
     priority = body.priority if body.priority in ("low", "medium", "high") else "medium"
-    init_db()
     with get_connection() as conn:
         _user_exists(conn, user_id)
         cur = conn.execute(
@@ -263,7 +259,6 @@ def add_task(user_id: int, body: TaskBody, request: Request):
 @router.patch("/{user_id}/tasks/{task_id}")
 def patch_task(user_id: int, task_id: int, body: TaskPatch, request: Request):
     require_self(request, user_id)
-    init_db()
     with get_connection() as conn:
         _user_exists(conn, user_id)
         row = conn.execute("SELECT * FROM user_tasks WHERE id = ?", (task_id,)).fetchone()
@@ -284,7 +279,6 @@ def patch_task(user_id: int, task_id: int, body: TaskPatch, request: Request):
 @router.delete("/{user_id}/tasks/{task_id}")
 def delete_task(user_id: int, task_id: int, request: Request):
     require_self(request, user_id)
-    init_db()
     with get_connection() as conn:
         _user_exists(conn, user_id)
         row = conn.execute("SELECT id FROM user_tasks WHERE id = ?", (task_id,)).fetchone()
@@ -301,7 +295,6 @@ def add_event(user_id: int, body: EventBody, request: Request):
     title = body.title.strip()
     if not title or not body.eventDate:
         raise HTTPException(status_code=400, detail="Укажите название и дату")
-    init_db()
     with get_connection() as conn:
         _user_exists(conn, user_id)
         cur = conn.execute(
@@ -325,7 +318,6 @@ def add_event(user_id: int, body: EventBody, request: Request):
 @router.delete("/{user_id}/events/{event_id}")
 def delete_event(user_id: int, event_id: int, request: Request):
     require_self(request, user_id)
-    init_db()
     with get_connection() as conn:
         conn.execute("DELETE FROM user_events WHERE id = ? AND user_id = ?", (event_id, user_id))
         conn.commit()
@@ -335,7 +327,6 @@ def delete_event(user_id: int, event_id: int, request: Request):
 @router.post("/{user_id}/files")
 async def upload_file(user_id: int, request: Request, file: UploadFile = File(...)):
     require_self(request, user_id)
-    init_db()
     filename = file.filename or "file"
     ext = Path(filename).suffix.lower()
     if ext not in ALLOWED_EXT:
@@ -382,7 +373,6 @@ async def upload_file(user_id: int, request: Request, file: UploadFile = File(..
 @router.delete("/{user_id}/files/{file_id}")
 def delete_file(user_id: int, file_id: int, request: Request):
     require_self(request, user_id)
-    init_db()
     with get_connection() as conn:
         _user_exists(conn, user_id)
         row = conn.execute(
@@ -411,8 +401,6 @@ def save_sales_chart(user_id: int, body: SalesChartBody, request: Request):
         if not label:
             raise HTTPException(status_code=400, detail="Укажите подпись для каждой точки")
         cleaned.append((label, float(point.value)))
-
-    init_db()
     with get_connection() as conn:
         _user_exists(conn, user_id)
         conn.execute("DELETE FROM user_sales_points WHERE user_id = ?", (user_id,))

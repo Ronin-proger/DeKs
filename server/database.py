@@ -117,12 +117,6 @@ def init_db() -> None:
         if "birthDate" not in user_columns:
             conn.execute("ALTER TABLE users ADD COLUMN birthDate TEXT")
 
-        note_columns = {
-            row[1] for row in conn.execute("PRAGMA table_info(obsidian_notes)").fetchall()
-        }
-        if "vault_path" not in note_columns:
-            conn.execute("ALTER TABLE obsidian_notes ADD COLUMN vault_path TEXT")
-
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS obsidian_notes (
@@ -135,12 +129,18 @@ def init_db() -> None:
                 tags TEXT DEFAULT '[]',
                 folder TEXT DEFAULT '',
                 author TEXT DEFAULT 'company',
+                vault_path TEXT,
                 created_at TEXT,
                 updated_at TEXT,
                 synced_at TEXT
             )
             """
         )
+        note_columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(obsidian_notes)").fetchall()
+        }
+        if "vault_path" not in note_columns:
+            conn.execute("ALTER TABLE obsidian_notes ADD COLUMN vault_path TEXT")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS obsidian_links (

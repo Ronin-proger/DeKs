@@ -2,8 +2,14 @@ import json
 import logging
 import re
 
-from database import get_connection, init_db
-from intelligence.embeddings import cosine_similarity, ollama_embeddings_enabled, reset_ollama_embed_state
+from database import get_connection
+from intelligence.embeddings import (
+    cosine_similarity,
+    embedding_backend,
+    ensure_embeddings_available,
+    ollama_embeddings_enabled,
+    reset_ollama_embed_state,
+)
 from intelligence.graph_links import wiki_linked_paths
 from intelligence.markdown_utils import jaccard_words
 from intelligence.insights import ask_llm
@@ -28,7 +34,6 @@ def _normalize_link_reason(reason: str, strength: float) -> str:
 
 
 def _existing_pairs() -> set[tuple[str, str]]:
-    init_db()
     pairs: set[tuple[str, str]] = set()
     with get_connection() as conn:
         for row in conn.execute(
@@ -47,8 +52,12 @@ def _existing_pairs() -> set[tuple[str, str]]:
 
 
 def _candidate_pairs() -> list[tuple[float, dict, dict]]:
-    init_db()
-    threshold = SIMILARITY_THRESHOLD if ollama_embeddings_enabled() else SIMILARITY_THRESHOLD_HASH
+    backend = embedding_backend()
+    threshold = (
+        SIMILARITY_THRESHOLD
+        if backend == "ollama"
+        else SIMILARITY_THRESHOLD_HASH
+    )
 
     with get_connection() as conn:
         notes = [dict(r) for r in conn.execute(
@@ -136,7 +145,6 @@ def _parse_link_json(raw: str) -> list[dict]:
 
 
 def _save_links(links: list[dict]) -> int:
-    init_db()
     saved = 0
     with get_connection() as conn:
         for item in links:
@@ -165,7 +173,6 @@ def _save_links(links: list[dict]) -> int:
 
 
 def list_semantic_links() -> list[dict]:
-    init_db()
     with get_connection() as conn:
         rows = conn.execute(
             """
@@ -202,6 +209,7 @@ def list_semantic_links() -> list[dict]:
 
 async def discover_semantic_links() -> dict:
     reset_ollama_embed_state()
+    ensure_embeddings_available()
     candidates = _candidate_pairs()
     if not candidates:
         return {
@@ -209,6 +217,7 @@ async def discover_semantic_links() -> dict:
             "discovered": 0,
             "candidates": 0,
             "links": list_semantic_links(),
+            "embeddingBackend": embedding_backend(),
             "message": (
                 "Кандидатов нет. Нажмите Sync vault (пересчитает embeddings), "
                 "добавьте заметки с осмысленным текстом (не случайные символы)."
@@ -264,10 +273,13 @@ async def discover_semantic_links() -> dict:
     metrics = compute_all_metrics()
     generate_insights(metrics)
 
+    backend = embedding_backend()
+    label = "Ollama" if backend == "ollama" else ("hash" if backend == "hash" else backend)
     return {
         "success": True,
         "discovered": saved,
         "candidates": len(candidates),
         "links": list_semantic_links(),
-        "message": f"Ollama нашёл {saved} смысловых связей",
+        "embeddingBackend": backend,
+        "message": f"{label}: найдено {saved} смысловых связей",
     }

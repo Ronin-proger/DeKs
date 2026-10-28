@@ -1,4 +1,3 @@
-import hmac
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -6,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 import bcrypt
 from fastapi import HTTPException, Request
 
-from database import get_connection, init_db
+from database import get_connection
 
 COOKIE_NAME = "deks_session"
 SESSION_DAYS = 14
@@ -17,28 +16,13 @@ def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
-def _is_hash(stored: str) -> bool:
-    return stored.startswith("$2")
-
-
 def password_matches(stored: str, password: str) -> bool:
-    if _is_hash(stored):
-        try:
-            return bcrypt.checkpw(password.encode("utf-8"), stored.encode("utf-8"))
-        except ValueError:
-            return False
-    return hmac.compare_digest(stored, password)
-
-
-def upgrade_password_if_needed(user_id: int, stored: str, password: str) -> None:
-    if _is_hash(stored):
-        return
-    with get_connection() as conn:
-        conn.execute(
-            "UPDATE users SET password = ? WHERE id = ?",
-            (hash_password(password), user_id),
-        )
-        conn.commit()
+    if not stored or not stored.startswith("$2"):
+        return False
+    try:
+        return bcrypt.checkpw(password.encode("utf-8"), stored.encode("utf-8"))
+    except ValueError:
+        return False
 
 
 def _utcnow() -> datetime:
@@ -46,7 +30,6 @@ def _utcnow() -> datetime:
 
 
 def create_session(user_id: int) -> str:
-    init_db()
     token = secrets.token_urlsafe(32)
     expires = (_utcnow() + timedelta(days=SESSION_DAYS)).isoformat()
     with get_connection() as conn:
@@ -61,7 +44,6 @@ def create_session(user_id: int) -> str:
 def delete_session(token: str | None) -> None:
     if not token:
         return
-    init_db()
     with get_connection() as conn:
         conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
         conn.commit()
@@ -80,7 +62,6 @@ def load_user(request: Request):
     token = _token_from_request(request)
     if not token:
         return None
-    init_db()
     with get_connection() as conn:
         row = conn.execute(
             """

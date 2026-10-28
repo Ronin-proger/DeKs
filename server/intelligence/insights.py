@@ -4,7 +4,7 @@ import re
 
 from openai import AsyncOpenAI
 
-from database import get_connection, init_db
+from database import get_connection
 from intelligence.markdown_utils import utc_now, dumps_json
 from intelligence.prompts import PROMPT_VAULT_INSIGHTS, SYSTEM_ANALYST
 from intelligence_config import OLLAMA_BASE_URL, OLLAMA_CHAT_MODEL
@@ -109,8 +109,6 @@ def generate_insights(metrics: dict) -> list[dict]:
                 {"folder": item["folder"]},
             )
         )
-
-    init_db()
     with get_connection() as conn:
         conn.execute("DELETE FROM intelligence_insights")
         for item in insights:
@@ -156,7 +154,6 @@ def _insight(title, body, severity, category, payload=None) -> dict:
 
 
 def list_insights() -> list[dict]:
-    init_db()
     with get_connection() as conn:
         rows = conn.execute(
             "SELECT title, body, severity, category, payload, created_at FROM intelligence_insights ORDER BY id DESC"

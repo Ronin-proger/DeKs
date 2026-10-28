@@ -5,6 +5,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from chat import send_message
@@ -23,9 +24,9 @@ from security import (
     create_session,
     delete_session,
     hash_password,
+    load_user,
     password_matches,
     require_user,
-    upgrade_password_if_needed,
 )
 from user_utils import serialize_colleague, serialize_user_self
 
@@ -37,6 +38,17 @@ UPLOADS_DIR.mkdir(exist_ok=True)
 (UPLOADS_DIR / "chat").mkdir(exist_ok=True)
 (UPLOADS_DIR / "avatars").mkdir(exist_ok=True)
 (UPLOADS_DIR / "workspace").mkdir(exist_ok=True)
+
+PUBLIC_PATHS = {
+    "/",
+    "/health",
+    "/api/login",
+    "/api/register",
+    "/api/logout",
+    "/docs",
+    "/openapi.json",
+    "/redoc",
+}
 
 
 @asynccontextmanager
@@ -52,6 +64,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
 def _client_origins() -> list[str]:
     raw = os.getenv("CLIENT_ORIGIN", "").strip()
     if not raw:
@@ -59,12 +72,14 @@ def _client_origins() -> list[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
+# Local defaults are permissive; production should set CLIENT_ORIGIN and
+# COOKIE_SECURE=true, and restrict methods/headers to what the client needs.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_client_origins(),
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Webhook-Secret", "X-Hub-Signature-256"],
 )
 
 app.include_router(messenger_router)
@@ -77,15 +92,36 @@ app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
 
 
 @app.middleware("http")
-async def log_requests(request, call_next):
-    logger.info("%s %s", request.method, request.url.path)
+async def auth_and_log(request: Request, call_next):
+    path = request.url.path
+    logger.info("%s %s", request.method, path)
+
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
+    if path in PUBLIC_PATHS or path == "/api/intelligence/webhook":
+        return await call_next(request)
+
+    if path.startswith("/uploads/") or (
+        path.startswith("/api/") and path not in PUBLIC_PATHS
+    ):
+        # Route handlers still call require_user/require_self; this covers
+        # StaticFiles under /uploads and any missed API route.
+        if path.startswith("/uploads/") and load_user(request) is None:
+            return JSONResponse({"detail": "Нужно войти"}, status_code=401)
+
     response = await call_next(request)
     return response
 
 
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
 @app.get("/")
 def root():
-    return {"success": True, "message": "Сервер работает"}
+    return {"status": "ok", "service": "deks-api"}
 
 
 @app.post("/api/register")
@@ -104,7 +140,6 @@ def register(body: RegisterRequest):
         )
 
     try:
-        init_db()
         with get_connection() as conn:
             existing = conn.execute(
                 "SELECT id FROM users WHERE email = ?",
@@ -112,7 +147,7 @@ def register(body: RegisterRequest):
             ).fetchone()
 
             if existing:
-                return {"success": False, "message": "Такой пользователь уже существует"}
+                raise HTTPException(status_code=409, detail="Такой пользователь уже существует")
 
             conn.execute(
                 "INSERT INTO users (fullName, email, password) VALUES (?, ?, ?)",
@@ -122,6 +157,8 @@ def register(body: RegisterRequest):
 
         logger.info("User registered: %s", email)
         return {"success": True, "message": "Регистрация успешна"}
+    except HTTPException:
+        raise
     except Exception:
         logger.exception("Registration error")
         raise HTTPException(status_code=500, detail=SERVER_ERROR)
@@ -133,7 +170,7 @@ def login(body: LoginRequest, response: Response):
     password = body.password.strip()
 
     if not email or not password:
-        return {"success": False, "message": "Введите email и пароль"}
+        raise HTTPException(status_code=400, detail="Введите email и пароль")
 
     try:
         with get_connection() as conn:
@@ -143,9 +180,8 @@ def login(body: LoginRequest, response: Response):
             ).fetchone()
 
         if not user or not password_matches(user["password"], password):
-            return {"success": False, "message": "Неверная почта или пароль"}
+            raise HTTPException(status_code=401, detail="Неверная почта или пароль")
 
-        upgrade_password_if_needed(user["id"], user["password"], password)
         token = create_session(user["id"])
         response.set_cookie(value=token, **cookie_settings())
         logger.info("Login success: %s", email)
@@ -154,6 +190,8 @@ def login(body: LoginRequest, response: Response):
             "message": "Добро пожаловать!",
             "user": serialize_user_self(user),
         }
+    except HTTPException:
+        raise
     except Exception:
         logger.exception("Login error")
         raise HTTPException(status_code=500, detail=SERVER_ERROR)
@@ -176,7 +214,6 @@ def me(request: Request):
 def colleagues(request: Request):
     user = require_user(request)
     try:
-        init_db()
         with get_connection() as conn:
             rows = conn.execute(
                 """
@@ -196,7 +233,6 @@ def colleagues(request: Request):
 @app.get("/api/colleagues/{user_id}")
 def colleague(user_id: int, request: Request):
     require_user(request)
-    init_db()
     with get_connection() as conn:
         row = conn.execute(
             "SELECT id, fullName, avatarUrl, position FROM users WHERE id = ?",
@@ -208,7 +244,8 @@ def colleague(user_id: int, request: Request):
 
 
 @app.post("/api/chat")
-async def chat(body: ChatRequest):
+async def chat(body: ChatRequest, request: Request):
+    require_user(request)
     message = body.message.strip()
     if not message:
         raise HTTPException(status_code=400, detail="Сообщение пустое")
@@ -218,4 +255,4 @@ async def chat(body: ChatRequest):
         return {"success": True, "response": response}
     except Exception:
         logger.exception("AI chat error")
-        return {"success": False, "message": SERVER_ERROR}
+        raise HTTPException(status_code=500, detail=SERVER_ERROR)

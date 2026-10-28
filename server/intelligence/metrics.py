@@ -2,7 +2,7 @@ import json
 import math
 from datetime import datetime, timedelta, timezone
 
-from database import get_connection, init_db
+from database import get_connection
 from intelligence.markdown_utils import (
     display_folder,
     is_user_facing_note,
@@ -19,7 +19,6 @@ def _sigmoid(value: float) -> float:
 
 
 def compute_all_metrics() -> dict:
-    init_db()
     with get_connection() as conn:
         all_notes = [dict(row) for row in conn.execute("SELECT * FROM obsidian_notes").fetchall()]
         all_links = [dict(row) for row in conn.execute("SELECT * FROM obsidian_links").fetchall()]
@@ -223,7 +222,6 @@ def _persist_metrics(metrics: dict) -> None:
 
 
 def get_graph_data() -> dict:
-    init_db()
     with get_connection() as conn:
         all_notes = [dict(row) for row in conn.execute("SELECT path, title, word_count, tags, folder, updated_at FROM obsidian_notes").fetchall()]
         all_links = [

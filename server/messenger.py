@@ -5,7 +5,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Query, Request, Upload
 
 from security import require_self
 
-from database import get_connection, init_db
+from database import get_connection
 from schemas import PrivateRoomRequest, SendMessageRequest
 
 router = APIRouter(prefix="/api/messenger", tags=["messenger"])
@@ -302,7 +302,6 @@ def _delete_private_room(conn, room_id: int, user_id: int) -> None:
 @router.get("/rooms")
 def list_rooms(request: Request, userId: int = Query(..., ge=1)):
     require_self(request, userId)
-    init_db()
     with get_connection() as conn:
         if not _user_exists(conn, userId):
             raise HTTPException(status_code=404, detail="Пользователь не найден")
@@ -363,7 +362,6 @@ def list_rooms(request: Request, userId: int = Query(..., ge=1)):
 @router.post("/rooms/private")
 def create_private_room(body: PrivateRoomRequest, request: Request):
     require_self(request, body.userId)
-    init_db()
     with get_connection() as conn:
         if not _user_exists(conn, body.userId):
             raise HTTPException(status_code=404, detail="Пользователь не найден")
@@ -399,7 +397,6 @@ def get_messages(
     after: int = Query(0, ge=0),
 ):
     require_self(request, userId)
-    init_db()
     with get_connection() as conn:
         if not _can_access_room(conn, room_id, userId):
             raise HTTPException(status_code=403, detail="Нет доступа к чату")
@@ -423,7 +420,6 @@ def get_messages(
 @router.get("/unread")
 def get_unread(request: Request, userId: int = Query(..., ge=1)):
     require_self(request, userId)
-    init_db()
     with get_connection() as conn:
         if not _user_exists(conn, userId):
             raise HTTPException(status_code=404, detail="Пользователь не найден")
@@ -460,7 +456,6 @@ def mark_room_read(
     lastMessageId: int = Query(0, ge=0),
 ):
     require_self(request, userId)
-    init_db()
     with get_connection() as conn:
         if not _can_access_room(conn, room_id, userId):
             raise HTTPException(status_code=403, detail="Нет доступа к чату")
@@ -490,7 +485,6 @@ def mark_room_read(
 @router.delete("/rooms/{room_id}")
 def delete_private_room(room_id: int, request: Request, userId: int = Query(..., ge=1)):
     require_self(request, userId)
-    init_db()
     with get_connection() as conn:
         if not _user_exists(conn, userId):
             raise HTTPException(status_code=404, detail="Пользователь не найден")
@@ -506,8 +500,6 @@ def send_message(room_id: int, body: SendMessageRequest, request: Request):
     content = body.content.strip()
     if not content:
         raise HTTPException(status_code=400, detail="Сообщение пустое")
-
-    init_db()
     with get_connection() as conn:
         if not _can_access_room(conn, room_id, body.userId):
             raise HTTPException(status_code=403, detail="Нет доступа к чату")
@@ -539,7 +531,6 @@ async def send_file(
     caption: str = Form(""),
 ):
     require_self(request, userId)
-    init_db()
     ext = _validate_extension(file.filename or "")
 
     content = await file.read()

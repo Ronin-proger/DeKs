@@ -1,7 +1,7 @@
 import json
 import logging
 
-from database import get_connection, init_db
+from database import get_connection
 from intelligence.insights import ask_llm, polish_plain_text
 from intelligence.link_discovery import discover_semantic_links
 from intelligence.markdown_utils import content_preview, note_domain, loads_json, utc_now, dumps_json
@@ -24,7 +24,6 @@ PROMPT_VAULT_AGENT = (
 
 
 def _build_catalog(limit: int = 40) -> tuple[str, dict]:
-    init_db()
     with get_connection() as conn:
         rows = conn.execute(
             """
@@ -51,7 +50,6 @@ def _build_catalog(limit: int = 40) -> tuple[str, dict]:
 
 
 async def run_vault_agent(analyze_links: bool = True) -> dict:
-    init_db()
     with get_connection() as conn:
         notes_count = conn.execute("SELECT COUNT(*) AS c FROM obsidian_notes").fetchone()["c"]
         links_count = conn.execute("SELECT COUNT(*) AS c FROM obsidian_links WHERE target_path IS NOT NULL").fetchone()["c"]
@@ -117,7 +115,6 @@ async def run_vault_agent(analyze_links: bool = True) -> dict:
 
 
 def get_last_agent_report() -> dict | None:
-    init_db()
     from intelligence.markdown_utils import loads_json as load_json
     with get_connection() as conn:
         row = conn.execute("SELECT value, updated_at FROM sync_state WHERE key = 'last_agent_report'").fetchone()

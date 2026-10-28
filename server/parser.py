@@ -7,9 +7,10 @@ from urllib.parse import urljoin, urlparse
 
 import httpx
 from bs4 import BeautifulSoup
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from schemas import ParseRequest
+from security import require_user
 
 router = APIRouter(prefix="/api/parser", tags=["parser"])
 
@@ -245,7 +246,8 @@ def _build_result(
 
 
 @router.post("/scrape")
-def scrape_url(body: ParseRequest):
+def scrape_url(body: ParseRequest, request: Request):
+    require_user(request)
     url = _normalize_url(body.url)
     _validate_target_url(url)
     mode = body.mode if body.mode in {"auto", "links", "tables", "text"} else "auto"

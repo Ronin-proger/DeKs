@@ -183,7 +183,6 @@ def delete_all_markdown(vault: Path) -> int:
 
 
 def clear_index() -> None:
-    init_db()
     with get_connection() as conn:
         conn.execute("DELETE FROM ai_note_links")
         conn.execute("DELETE FROM obsidian_links")
@@ -203,6 +202,7 @@ def seed_notes() -> int:
 
 
 def main():
+    init_db()
     vault = OBSIDIAN_VAULT_PATH
     print(f"Vault: {vault}")
     removed = delete_all_markdown(vault)

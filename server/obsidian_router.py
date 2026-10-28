@@ -9,18 +9,21 @@ from obsidian_client import (
     read_note,
     write_note,
 )
+from security import require_user
 
 router = APIRouter(prefix="/api/obsidian", tags=["obsidian"])
 
 
 @router.get("/status")
-def obsidian_status():
+def obsidian_status(request: Request):
+    require_user(request)
     status = check_status()
     return {"success": True, **status}
 
 
 @router.get("/vault")
-def obsidian_vault_list():
+def obsidian_vault_list(request: Request):
+    require_user(request)
     try:
         files = list_vault_files()
         return {
@@ -32,7 +35,8 @@ def obsidian_vault_list():
 
 
 @router.get("/vault/{path:path}")
-def obsidian_vault_read(path: str):
+def obsidian_vault_read(path: str, request: Request):
+    require_user(request)
     try:
         content = read_note(path)
         return Response(content=content, media_type="text/markdown; charset=utf-8")
@@ -44,6 +48,7 @@ def obsidian_vault_read(path: str):
 
 @router.put("/vault/{path:path}")
 async def obsidian_vault_write(path: str, request: Request):
+    require_user(request)
     body = await request.body()
     content = body.decode("utf-8")
     safe_path = normalize_vault_path(path)
@@ -56,7 +61,8 @@ async def obsidian_vault_write(path: str, request: Request):
 
 
 @router.post("/push")
-def obsidian_vault_push():
+def obsidian_vault_push(request: Request):
+    require_user(request)
     result = push_notes_to_vault()
     if result.get("errors"):
         raise HTTPException(
@@ -67,7 +73,8 @@ def obsidian_vault_push():
 
 
 @router.delete("/vault/{path:path}")
-def obsidian_vault_delete(path: str):
+def obsidian_vault_delete(path: str, request: Request):
+    require_user(request)
     try:
         delete_note(path)
         remove_note_from_db(path)

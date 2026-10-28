@@ -1,7 +1,10 @@
 import logging
-import re
 
-from intelligence.embeddings import search_notes
+from intelligence.embeddings import (
+    embedding_backend,
+    ensure_embeddings_available,
+    search_notes,
+)
 from intelligence.insights import ask_llm, polish_plain_text
 from intelligence.prompts import PROMPT_IDEA_PAIR, PROMPT_RAG, SYSTEM_IDEAS, SYSTEM_RAG
 
@@ -9,6 +12,8 @@ logger = logging.getLogger(__name__)
 
 
 async def rag_chat(message: str) -> dict:
+    ensure_embeddings_available()
+    backend = embedding_backend()
     hits = search_notes(message, limit=6)
     if not hits:
         answer = await ask_llm(
@@ -17,7 +22,11 @@ async def rag_chat(message: str) -> dict:
             system=SYSTEM_RAG,
             max_tokens=1000,
         )
-        return {"answer": polish_plain_text(answer), "sources": []}
+        return {
+            "answer": polish_plain_text(answer),
+            "sources": [],
+            "embeddingBackend": backend,
+        }
 
     context_blocks = []
     for hit in hits:
@@ -25,15 +34,20 @@ async def rag_chat(message: str) -> dict:
     context = "\n\n---\n\n".join(context_blocks)
     prompt = PROMPT_RAG.format(context=context, question=message)
     answer = await ask_llm(prompt, system=SYSTEM_RAG, max_tokens=1200)
-    return {"answer": polish_plain_text(answer), "sources": hits}
+    return {
+        "answer": polish_plain_text(answer),
+        "sources": hits,
+        "embeddingBackend": backend,
+    }
 
 
 async def generate_ideas() -> dict:
-    from database import get_connection, init_db
+    from database import get_connection
     from intelligence.embeddings import cosine_similarity
     import json
 
-    init_db()
+    ensure_embeddings_available()
+    backend = embedding_backend()
     with get_connection() as conn:
         notes = conn.execute("SELECT path, title, content FROM obsidian_notes").fetchall()
         links = {
@@ -68,7 +82,11 @@ async def generate_ideas() -> dict:
 
     pairs.sort(key=lambda item: item[0], reverse=True)
     if not pairs:
-        return {"ideas": [], "message": "Пока не найдено пересечений. Запустите «Найти связи (Ollama)» на вкладке Граф."}
+        return {
+            "ideas": [],
+            "message": "Пока не найдено пересечений. Запустите «Найти связи (Ollama)» на вкладке Граф.",
+            "embeddingBackend": backend,
+        }
 
     ideas = []
     for score, a, b in pairs[:3]:
@@ -91,4 +109,4 @@ async def generate_ideas() -> dict:
                 "text": text,
             }
         )
-    return {"ideas": ideas}
+    return {"ideas": ideas, "embeddingBackend": backend}

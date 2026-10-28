@@ -17,7 +17,7 @@ from intelligence.markdown_utils import (
 )
 from intelligence_config import OBSIDIAN_VAULT_PATH
 from obsidian_client import fetch_notes_for_sync
-from database import get_connection, init_db
+from database import get_connection
 
 logger = logging.getLogger(__name__)
 
@@ -75,16 +75,24 @@ def _fetch_obsidian_api() -> list[dict]:
 
 
 def enrich_vault_after_sync() -> dict:
-    from intelligence.embeddings import rebuild_embeddings
+    from intelligence.embeddings import EmbeddingUnavailable, embedding_backend, rebuild_embeddings
     from intelligence.metrics import compute_all_metrics
     from intelligence.insights import generate_insights
 
-    rebuild_embeddings()
+    embed_error = None
+    try:
+        rebuild_embeddings()
+    except EmbeddingUnavailable as exc:
+        embed_error = str(exc)
+        logger.warning("Skipping embeddings after sync: %s", exc)
+
     metrics = compute_all_metrics()
     insights = generate_insights(metrics)
     return {
         "metrics": metrics,
         "insightsCount": len(insights),
+        "embeddingBackend": embedding_backend(),
+        "embeddingError": embed_error,
     }
 
 
@@ -92,8 +100,6 @@ def push_notes_to_vault() -> dict:
     """Write notes that exist in DB but not on disk into HAC/Obsidian."""
     from obsidian_client import normalize_vault_path, write_note
     from intelligence_config import OBSIDIAN_VAULT_PATH
-
-    init_db()
     pushed = 0
     skipped = 0
     errors: list[dict] = []
@@ -132,7 +138,6 @@ def push_notes_to_vault() -> dict:
 
 
 def sync_vault(force: bool = False, enrich: bool = True) -> dict:
-    init_db()
     api_notes = _fetch_obsidian_api()
     local_notes = _scan_local_vault()
 
@@ -266,7 +271,6 @@ def _build_path_index(conn) -> dict[str, str]:
 
 
 def upsert_note_to_db(path: str, content: str, vault_path: str | None = None) -> dict:
-    init_db()
     canonical = normalize_note_path(path.replace("\\", "/").lstrip("/"))
     tags = extract_tags(content)
     title = extract_title(canonical, content)
@@ -327,14 +331,16 @@ def upsert_note_to_db(path: str, content: str, vault_path: str | None = None) ->
             )
         conn.commit()
 
-    from intelligence.embeddings import upsert_note_embedding
+    from intelligence.embeddings import EmbeddingUnavailable, upsert_note_embedding
 
-    upsert_note_embedding(canonical, content)
+    try:
+        upsert_note_embedding(canonical, content)
+    except EmbeddingUnavailable as exc:
+        logger.warning("Skip embedding for %s: %s", canonical, exc)
     return {"path": canonical, "title": title}
 
 
 def remove_note_from_db(path: str) -> None:
-    init_db()
     canonical = normalize_note_path(path.replace("\\", "/").lstrip("/"))
     with get_connection() as conn:
         conn.execute(

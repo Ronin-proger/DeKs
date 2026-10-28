@@ -1,8 +1,6 @@
 # API
 
-Backend корпоративного аналитического сервиса DeKs.
-
-Запуск из корня репозитория описан в основном `README.md`. Локально:
+FastAPI backend for DeKs. Run from the repository root via Docker Compose or `make api`.
 
 ```bash
 python -m venv .venv
@@ -11,4 +9,4 @@ pip install -r requirements.txt
 python -m uvicorn main:app --host 0.0.0.0 --port 3001 --reload
 ```
 
-Требования: Python 3.11+, SQLite из стандартной библиотеки. Для ассистента и смысловых связей нужна локальная модель. Для обмена заметками — хранилище в каталоге `HAC` и ключ в `.env` в корне проекта.
+Requires Python 3.11+, SQLite, and (for intelligence features) a local Ollama instance with chat and embed models. Vault path and keys live in the root `.env`.

@@ -424,9 +424,13 @@ function ObsidianPage() {
         120000,
       );
       const data = await parseApiResponse(response);
+      let content = data.answer;
+      if (data.embeddingBackend === 'hash') {
+        content = `${t('obs_embed_hash_note')}\n\n${content}`;
+      }
       setChatMessages((prev) => [
         ...prev,
-        { role: 'assistant', content: data.answer, sources: data.sources || [] },
+        { role: 'assistant', content, sources: data.sources || [], embeddingBackend: data.embeddingBackend },
       ]);
     } catch (err) {
       const message = err?.name === 'AbortError'

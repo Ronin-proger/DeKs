@@ -1,31 +1,35 @@
-# зависимости и окружения
+# dependencies and environments
 node_modules/
 .venv/
 .venv-*/
 venv/
 
-# секреты
+# secrets
 .env*
 !.env.example
-HAC/.obsidian/plugins/obsidian-local-rest-api/data.json
 
-# локальные данные
+# local data
 *.db
 *.db-shm
 *.db-wal
 server/uploads/
 __pycache__/
 *.py[cod]
+.pytest_cache/
 
-# кэш моделей
+# Obsidian plugin binaries (install Local REST API from community plugins)
+.obsidian/plugins/
+HAC/.obsidian/plugins/
+
+# model cache
 .ollama/
 models/
 *.gguf
 *.onnx
 
-# сборка
+# build
 client/dist/
 
-# система
+# system
 .DS_Store
 Thumbs.db

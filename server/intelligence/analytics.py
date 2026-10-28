@@ -1,13 +1,12 @@
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 
-from database import get_connection, init_db
+from database import get_connection
 from intelligence.graph_links import all_linked_paths, wiki_linked_paths
 from intelligence.markdown_utils import is_user_facing_note, loads_json, note_domain, utc_now
 
 
 def compute_vault_analytics() -> dict:
-    init_db()
     with get_connection() as conn:
         all_notes = [dict(row) for row in conn.execute("SELECT * FROM obsidian_notes").fetchall()]
         links = [dict(row) for row in conn.execute("SELECT * FROM obsidian_links").fetchall()]
@@ -149,7 +148,6 @@ def compute_vault_analytics() -> dict:
 
 
 def analyze_note(path: str) -> dict | None:
-    init_db()
     with get_connection() as conn:
         row = conn.execute("SELECT * FROM obsidian_notes WHERE path = ? LIMIT 1", (path,)).fetchone()
         if not row:

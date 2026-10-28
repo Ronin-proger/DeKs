@@ -1,22 +1,35 @@
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+import hashlib
+import hmac
+import json
+import os
+
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 
 from intelligence.analytics import analyze_note, compute_vault_analytics
-from intelligence.insights import enrich_insights_with_ai, generate_insights, list_insights
+from intelligence.embeddings import EmbeddingUnavailable, embedding_backend
+from intelligence.insights import enrich_insights_with_ai, list_insights
 from intelligence.link_discovery import discover_semantic_links, list_semantic_links
 from intelligence.vault_agent import get_last_agent_report, run_vault_agent
 from intelligence.metrics import compute_all_metrics, get_graph_data, get_landscape
 from intelligence.rag import generate_ideas, rag_chat
 from intelligence.vault_sync import enrich_vault_after_sync, push_notes_to_vault, sync_vault
 from schemas import RagChatRequest, SyncRequest
+from security import require_user
 
 router = APIRouter(prefix="/api/intelligence", tags=["intelligence"])
 
 
+def _embed_unavailable(exc: EmbeddingUnavailable) -> HTTPException:
+    return HTTPException(status_code=503, detail=str(exc))
+
+
 @router.post("/sync")
 async def run_sync(
+    request: Request,
     background_tasks: BackgroundTasks,
     body: SyncRequest | None = None,
 ):
+    require_user(request)
     force = bool(body.force) if body else False
     result = sync_vault(force=force, enrich=False)
     if not result.get("success"):
@@ -40,11 +53,11 @@ async def run_sync(
 
 
 @router.get("/status")
-def intelligence_status():
-    from database import get_connection, init_db
+def intelligence_status(request: Request):
+    require_user(request)
+    from database import get_connection
     from intelligence.markdown_utils import loads_json
 
-    init_db()
     with get_connection() as conn:
         notes_count = conn.execute("SELECT COUNT(*) AS c FROM obsidian_notes").fetchone()["c"]
         links_count = conn.execute("SELECT COUNT(*) AS c FROM obsidian_links").fetchone()["c"]
@@ -57,15 +70,16 @@ def intelligence_status():
         "linksCount": links_count,
         "lastSyncAt": sync_row["updated_at"] if sync_row else None,
         "lastSyncMeta": last_sync,
+        "embeddingBackend": embedding_backend(),
     }
 
 
 @router.get("/notes")
-def list_notes():
-    from database import get_connection, init_db
+def list_notes(request: Request):
+    require_user(request)
+    from database import get_connection
     from intelligence.markdown_utils import content_preview, format_display_title, is_user_facing_note
 
-    init_db()
     with get_connection() as conn:
         rows = conn.execute(
             """
@@ -97,11 +111,11 @@ def list_notes():
 
 
 @router.get("/notes/content")
-def get_note_content(path: str):
-    from database import get_connection, init_db
+def get_note_content(path: str, request: Request):
+    require_user(request)
+    from database import get_connection
     from intelligence.markdown_utils import normalize_note_path
 
-    init_db()
     clean = normalize_note_path(path)
     with get_connection() as conn:
         row = conn.execute(
@@ -127,15 +141,17 @@ def get_note_content(path: str):
 
 
 @router.get("/analytics")
-def get_analytics():
+def get_analytics(request: Request):
+    require_user(request)
     analytics = compute_vault_analytics()
     if not analytics:
-        return {"success": False, "message": "Нет данных. Выполните синхронизацию vault."}
+        raise HTTPException(status_code=404, detail="Нет данных. Выполните синхронизацию vault.")
     return {"success": True, "analytics": analytics}
 
 
 @router.get("/notes/analysis")
-def get_note_analysis(path: str):
+def get_note_analysis(path: str, request: Request):
+    require_user(request)
     result = analyze_note(path)
     if not result:
         raise HTTPException(status_code=404, detail="Заметка не найдена в индексе")
@@ -143,80 +159,130 @@ def get_note_analysis(path: str):
 
 
 @router.get("/metrics")
-def get_metrics():
+def get_metrics(request: Request):
+    require_user(request)
     metrics = compute_all_metrics()
     if not metrics:
-        return {"success": False, "message": "Нет данных. Выполните синхронизацию vault."}
+        raise HTTPException(status_code=404, detail="Нет данных. Выполните синхронизацию vault.")
     return {"success": True, "metrics": metrics}
 
 
 @router.post("/agent/analyze")
-async def vault_agent_analyze():
-    result = await run_vault_agent(analyze_links=True)
+async def vault_agent_analyze(request: Request):
+    require_user(request)
+    try:
+        result = await run_vault_agent(analyze_links=True)
+    except EmbeddingUnavailable as exc:
+        raise _embed_unavailable(exc) from exc
     if not result.get("success"):
         raise HTTPException(status_code=400, detail=result.get("message", "Agent failed"))
     return result
 
 
 @router.get("/agent/report")
-def vault_agent_report():
+def vault_agent_report(request: Request):
+    require_user(request)
     report = get_last_agent_report()
     if not report:
-        return {"success": False, "message": "Отчёт ещё не создан. Запустите AI-агента."}
+        raise HTTPException(status_code=404, detail="Отчёт ещё не создан. Запустите AI-агента.")
     return {"success": True, **report}
 
 
 @router.post("/links/discover")
-async def discover_links():
-    result = await discover_semantic_links()
+async def discover_links(request: Request):
+    require_user(request)
+    try:
+        result = await discover_semantic_links()
+    except EmbeddingUnavailable as exc:
+        raise _embed_unavailable(exc) from exc
     if not result.get("success"):
         raise HTTPException(status_code=400, detail=result.get("message", "Discovery failed"))
     return result
 
 
 @router.get("/links/semantic")
-def get_semantic_links():
+def get_semantic_links(request: Request):
+    require_user(request)
     return {"success": True, "links": list_semantic_links()}
 
 
 @router.get("/graph")
-def get_graph():
+def get_graph(request: Request):
+    require_user(request)
     return {"success": True, "graph": get_graph_data()}
 
 
 @router.get("/landscape")
-def get_cognitive_landscape():
-    return {"success": True, "points": get_landscape()}
+def get_cognitive_landscape(request: Request):
+    require_user(request)
+    return {
+        "success": True,
+        "points": get_landscape(),
+        "embeddingBackend": embedding_backend(),
+    }
 
 
 @router.get("/insights")
-def get_insights():
+def get_insights(request: Request):
+    require_user(request)
     return {"success": True, "insights": list_insights()}
 
 
 @router.post("/insights/ai")
-async def get_ai_insights():
+async def get_ai_insights(request: Request):
+    require_user(request)
     metrics = compute_all_metrics()
     summary = await enrich_insights_with_ai(metrics)
     return {"success": True, "summary": summary, "metrics": metrics}
 
 
 @router.post("/rag")
-async def intelligence_rag(body: RagChatRequest):
+async def intelligence_rag(body: RagChatRequest, request: Request):
+    require_user(request)
     message = body.message.strip()
     if not message:
         raise HTTPException(status_code=400, detail="Сообщение пустое")
-    result = await rag_chat(message)
+    try:
+        result = await rag_chat(message)
+    except EmbeddingUnavailable as exc:
+        raise _embed_unavailable(exc) from exc
     return {"success": True, **result}
 
 
 @router.post("/ideas")
-async def intelligence_ideas():
-    result = await generate_ideas()
+async def intelligence_ideas(request: Request):
+    require_user(request)
+    try:
+        result = await generate_ideas()
+    except EmbeddingUnavailable as exc:
+        raise _embed_unavailable(exc) from exc
     return {"success": True, **result}
 
 
 @router.post("/webhook")
-def obsidian_webhook(payload: dict, background_tasks: BackgroundTasks):
+async def obsidian_webhook(request: Request, background_tasks: BackgroundTasks):
+    secret = os.getenv("WEBHOOK_SECRET", "").strip()
+    if not secret:
+        raise HTTPException(status_code=503, detail="WEBHOOK_SECRET is not configured")
+
+    body = await request.body()
+    provided = request.headers.get("x-webhook-secret", "").strip()
+    signature = request.headers.get("x-hub-signature-256", "").strip()
+    authorized = False
+    if provided and hmac.compare_digest(provided, secret):
+        authorized = True
+    elif signature.startswith("sha256="):
+        digest = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
+        expected = f"sha256={digest}"
+        authorized = hmac.compare_digest(signature, expected)
+
+    if not authorized:
+        raise HTTPException(status_code=401, detail="Invalid webhook credentials")
+
+    try:
+        payload = json.loads(body.decode("utf-8") or "{}")
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        payload = {}
+
     background_tasks.add_task(sync_vault, True)
     return {"success": True, "message": "Sync scheduled", "event": payload.get("event", "change")}

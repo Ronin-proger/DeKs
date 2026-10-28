@@ -2,11 +2,12 @@ import hashlib
 import json
 import logging
 import math
+import os
 import re
 
 import httpx
 
-from database import get_connection, init_db
+from database import get_connection
 from intelligence.markdown_utils import utc_now
 from intelligence_config import OLLAMA_BASE_URL, OLLAMA_EMBED_MODEL
 
@@ -16,9 +17,28 @@ EMBED_TIMEOUT = 120.0
 _ollama_embed_enabled: bool | None = None
 
 
+class EmbeddingUnavailable(Exception):
+    """Raised when no honest embedding backend is available."""
+
+
 def reset_ollama_embed_state() -> None:
     global _ollama_embed_enabled
     _ollama_embed_enabled = None
+
+
+def _fallback_mode() -> str:
+    return os.getenv("EMBEDDING_FALLBACK", "").strip().lower()
+
+
+def embedding_backend() -> str:
+    """Return current backend label: ollama | hash | unavailable."""
+    if _ollama_embed_enabled is True:
+        return "ollama"
+    if _fallback_mode() == "hash":
+        return "hash"
+    if _ollama_embed_enabled is False:
+        return "unavailable"
+    return "unknown"
 
 
 def ollama_embeddings_enabled() -> bool:
@@ -42,7 +62,7 @@ def get_embedding(text: str) -> list[float]:
     global _ollama_embed_enabled
     snippet = text[:4000]
     if not snippet.strip():
-        return _hash_embedding("empty")
+        snippet = "empty"
 
     try:
         response = httpx.post(
@@ -59,9 +79,35 @@ def get_embedding(text: str) -> list[float]:
         if response.status_code == 404:
             _ollama_embed_enabled = False
             logger.warning("Ollama embed model not found: %s", OLLAMA_EMBED_MODEL)
+        else:
+            _ollama_embed_enabled = False
+            logger.warning(
+                "Ollama embeddings HTTP %s",
+                response.status_code,
+            )
     except Exception as exc:
+        _ollama_embed_enabled = False
         logger.warning("Ollama embeddings unavailable: %s", exc)
-    return _hash_embedding(snippet)
+
+    if _fallback_mode() == "hash":
+        return _hash_embedding(snippet)
+
+    raise EmbeddingUnavailable(
+        f"Embedding model unavailable ({OLLAMA_EMBED_MODEL}). "
+        "Start Ollama with the embed model, or set EMBEDDING_FALLBACK=hash "
+        "for token-hash search (not semantic embeddings)."
+    )
+
+
+def ensure_embeddings_available() -> str:
+    """Probe backend; raise EmbeddingUnavailable if none usable."""
+    backend = embedding_backend()
+    if backend == "ollama":
+        return backend
+    if backend == "hash":
+        return backend
+    get_embedding("ping")
+    return embedding_backend()
 
 
 def cosine_similarity(a: list[float], b: list[float]) -> float:
@@ -79,7 +125,6 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
 
 
 def upsert_note_embedding(note_path: str, content: str) -> None:
-    init_db()
     embedding = get_embedding(content or "")
     with get_connection() as conn:
         conn.execute(
@@ -96,7 +141,6 @@ def upsert_note_embedding(note_path: str, content: str) -> None:
 
 
 def rebuild_embeddings() -> int:
-    init_db()
     reset_ollama_embed_state()
     count = 0
     with get_connection() as conn:
@@ -121,8 +165,8 @@ def rebuild_embeddings() -> int:
 
 
 def search_notes(query: str, limit: int = 5) -> list[dict]:
-    init_db()
     query_vec = get_embedding(query)
+    backend = embedding_backend()
     results = []
     with get_connection() as conn:
         rows = conn.execute(
@@ -146,6 +190,7 @@ def search_notes(query: str, limit: int = 5) -> list[dict]:
                     "title": row["title"],
                     "score": round(score, 4),
                     "excerpt": excerpt,
+                    "embeddingBackend": backend,
                 }
             )
     results.sort(key=lambda item: item["score"], reverse=True)
