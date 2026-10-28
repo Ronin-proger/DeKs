@@ -1,66 +1,77 @@
 # DeKs
 
-Internal workspace app: dashboard, messenger, page parsing, and an Obsidian note index with optional local-model search.
+[![ci](https://github.com/Ronin-proger/DeKs/actions/workflows/ci.yml/badge.svg)](https://github.com/Ronin-proger/DeKs/actions/workflows/ci.yml)
+
+Team workspace built around a shared Obsidian vault: tasks, calendar, files and messenger on one side, a searchable knowledge graph with a local language model on the other. Notes stay plain markdown in the vault; the service indexes them, links them and answers questions with sources.
+
+React · FastAPI · SQLite · Ollama · Docker Compose
+
+![Workspace](docs/cabinet.png)
+
+## Capabilities
+
+- **Workspace.** Tasks, calendar, files, shared links, metrics, page parsing (headings, links, tables) and full-text search across the workspace.
+- **Messenger.** Shared and direct rooms, attachments, unread counters.
+- **Vault sync.** Two-way exchange with Obsidian through the Local REST API, with a direct file-system fallback. Webhooks queue re-indexing when a note changes. Front matter, folders, tags and `[[wikilinks]]` are parsed into SQLite, so analytics never hit Obsidian on a page load.
+- **Retrieval.** Notes are embedded with a local model; questions are answered only from the nearest fragments and always return their sources. With no relevant context the assistant says so.
+- **Link discovery.** Pairs of semantically close notes that are not linked yet are proposed with a one-line reason; accepted links show up on the graph.
+- **Vault report.** A structured review of the whole vault: topics and clusters, isolated notes and duplicates, suggested links, next steps. Reports are stored and can be reopened without recomputation.
+- **Graph and metrics.** 3D graph with explicit and inferred links, semantic landscape, link density, hub notes, weekly activity.
+
+![Knowledge graph](docs/graph.png)
 
 ## Architecture
 
 ```text
-React (Vite)  →  FastAPI  →  SQLite
-                    ├── workspace / messenger / profile
-                    ├── Obsidian Local REST API ↔ markdown vault (HAC/)
-                    └── /api/intelligence (sync, embeddings, graph, RAG)
-                              ↓
-                         Ollama (chat + embed)
+React / Vite ──► FastAPI ─┬─ workspace · messenger · profile · parser
+                          ├─ SQLite (users, sessions, workspace, note index)
+                          ├─ Obsidian Local REST API ↔ markdown vault
+                          └─ /api/intelligence
+                               ├─ vault_sync      note index, wikilinks, webhook queue
+                               ├─ embeddings      Ollama embed model
+                               ├─ rag             retrieval + answer with sources
+                               ├─ link_discovery  candidate pairs → model verdict
+                               ├─ metrics         graph, landscape, insights
+                               └─ vault_agent     stored vault report
 ```
 
-Session auth uses an httpOnly cookie. Almost all API routes require a logged-in user; `/health`, `/api/login`, and `/api/register` are public. The Obsidian webhook (`POST /api/intelligence/webhook`) is authenticated with `WEBHOOK_SECRET` (header `X-Webhook-Secret` or HMAC `X-Hub-Signature-256`), not a user session.
+The intelligence layer is a separate router and never mixes with CRUD handlers. Embeddings are required: when the embed model is unreachable, retrieval endpoints return `503` instead of degrading silently. A token-hash index can be enabled explicitly for offline development (`EMBEDDING_FALLBACK=hash`); responses then carry `embeddingBackend: "hash"`.
 
-## Requirements
+## Security
 
-- Docker Compose (preferred), or Python 3.11+ and Node 20+
-- [Ollama](https://ollama.com) with a chat model and an embed model (defaults: `qwen2.5:1.5b`, `nomic-embed-text`)
-- [Obsidian](https://obsidian.md) with the **Local REST API** community plugin installed and configured (do not vendor the plugin binary into the repo)
-- Demo vault: markdown under `HAC/` only
+- Session tokens in an httpOnly cookie (`Secure` behind HTTPS via `COOKIE_SECURE`); every route except `/health`, `/api/login` and `/api/register` requires a session.
+- Passwords are stored as bcrypt hashes. Legacy plaintext rows are converted once by `scripts/migrate_passwords_to_bcrypt.py`.
+- The vault webhook is verified by `WEBHOOK_SECRET` (`X-Webhook-Secret` or HMAC `X-Hub-Signature-256`).
+- CORS origins are explicit (`CLIENT_ORIGIN`).
 
 ## Run
 
-Copy `.env.example` to `.env` and set at least `OBSIDIAN_API_KEY` / vault path as needed.
+Requirements: Docker Compose, or Python 3.11+ and Node 20+; [Ollama](https://ollama.com) with a chat and an embed model (defaults `qwen2.5:1.5b`, `nomic-embed-text`); Obsidian with the Local REST API plugin.
 
 ```bash
+cp .env.example .env
 docker compose up -d --build
 ```
 
-UI: `http://localhost:5173` · API: `http://localhost:3001` · health: `GET /health`
+UI `http://localhost:5173`, API `http://localhost:3001`.
 
-Helpers:
+Without Docker:
 
 ```bash
-make up          # docker compose
-make api         # local uvicorn on :3001
-make client      # local Vite on :5173
+make api      # uvicorn on :3001
+make client   # Vite on :5173
 make test
 ```
 
-Windows batch files (`start-all.bat`, `start-server.bat`, `start-client.bat`) remain for a non-Docker local start.
+`HAC/` is a sample vault for local runs.
 
-### Environment notes
+## Configuration
 
 | Variable | Purpose |
 | --- | --- |
-| `COOKIE_SECURE` | Set `true` / `1` behind HTTPS so the session cookie is Secure |
-| `CLIENT_ORIGIN` | Comma-separated browser origins for CORS (credentials enabled) |
-| `WEBHOOK_SECRET` | Required for vault change webhooks |
-| `EMBEDDING_FALLBACK` | Empty = require Ollama embeddings (else 503). `hash` = token-hash search with an honest `embeddingBackend: "hash"` label |
-| `OLLAMA_*` / `OBSIDIAN_*` | Local model and vault connectivity |
-
-CORS method/header lists are fixed for the app; do not widen them to `*` for production. Keep `CLIENT_ORIGIN` explicit.
-
-Passwords are bcrypt only. If an old DB still has plaintext hashes, run once:
-
-```bash
-python scripts/migrate_passwords_to_bcrypt.py
-```
-
-## Limitations
-
-Semantic search and related intelligence features need a reachable Ollama embed model. Without it, those endpoints return HTTP 503 unless `EMBEDDING_FALLBACK=hash` is set, in which case results are labeled as hash search and must not be treated as embeddings. Vault sync still indexes markdown and wikilinks without embeddings. The demo vault is sample markdown for local development; it is not a production knowledge base, and any “demo detector” tooling elsewhere does not apply to this repository.
+| `CLIENT_ORIGIN` | Comma-separated browser origins allowed by CORS |
+| `COOKIE_SECURE` | `true` behind HTTPS |
+| `WEBHOOK_SECRET` | Shared secret for vault change webhooks |
+| `OBSIDIAN_API_URL`, `OBSIDIAN_API_KEY`, `OBSIDIAN_VAULT_PATH` | Vault connectivity |
+| `OLLAMA_BASE_URL`, `OLLAMA_CHAT_MODEL`, `OLLAMA_EMBED_MODEL` | Local models |
+| `EMBEDDING_FALLBACK` | Empty by default; `hash` enables the offline token-hash index |

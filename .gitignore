@@ -33,3 +33,6 @@ client/dist/
 # system
 .DS_Store
 Thumbs.db
+
+# Obsidian per-user UI state
+HAC/.obsidian/workspace.json

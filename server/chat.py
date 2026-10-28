@@ -1,19 +1,20 @@
 from openai import AsyncOpenAI
 
-OLLAMA_BASE_URL = "http://localhost:11434/v1"
-DEFAULT_MODEL = "qwen2.5:1.5b"
+from intelligence_config import OLLAMA_BASE_URL, OLLAMA_CHAT_MODEL
+
 SYSTEM_PROMPT = (
     "Ты помощник продукта. Отвечай на языке пользователя; "
     "если язык неясен — на русском. Опирайся на контекст сообщения. "
     "Пиши кратко, обычным Markdown."
 )
 
-ai_client = AsyncOpenAI(base_url=OLLAMA_BASE_URL, api_key="ollama")
+# Ollama exposes an OpenAI-compatible API under /v1 and ignores the key.
+ai_client = AsyncOpenAI(base_url=f"{OLLAMA_BASE_URL.rstrip('/')}/v1", api_key="ollama")
 
 
 async def send_message(message: str) -> str:
     completion = await ai_client.chat.completions.create(
-        model=DEFAULT_MODEL,
+        model=OLLAMA_CHAT_MODEL,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": message},
